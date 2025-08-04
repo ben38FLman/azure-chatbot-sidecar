@@ -1,0 +1,392 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "applicationGatewayName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Application Gateway"
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Location for all resources"
+            }
+        },
+        "virtualNetworkName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the virtual network"
+            }
+        },
+        "subnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the subnet for Application Gateway"
+            }
+        },
+        "subnetAddressPrefix": {
+            "type": "string",
+            "defaultValue": "10.0.1.0/24",
+            "metadata": {
+                "description": "Address prefix for the Application Gateway subnet"
+            }
+        },
+        "vnetAddressPrefix": {
+            "type": "string",
+            "defaultValue": "10.0.0.0/16",
+            "metadata": {
+                "description": "Address prefix for the virtual network"
+            }
+        },
+        "publicIPName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the public IP address"
+            }
+        },
+        "publicIPAllocationMethod": {
+            "type": "string",
+            "defaultValue": "Static",
+            "allowedValues": [
+                "Dynamic",
+                "Static"
+            ],
+            "metadata": {
+                "description": "Public IP allocation method"
+            }
+        },
+        "publicIPSku": {
+            "type": "string",
+            "defaultValue": "Standard",
+            "allowedValues": [
+                "Basic",
+                "Standard"
+            ],
+            "metadata": {
+                "description": "Public IP SKU"
+            }
+        },
+        "applicationGatewaySku": {
+            "type": "string",
+            "defaultValue": "Standard_v2",
+            "allowedValues": [
+                "Standard_Small",
+                "Standard_Medium",
+                "Standard_Large",
+                "Standard_v2",
+                "WAF_Medium",
+                "WAF_Large",
+                "WAF_v2"
+            ],
+            "metadata": {
+                "description": "SKU of the Application Gateway"
+            }
+        },
+        "capacity": {
+            "type": "int",
+            "defaultValue": 2,
+            "minValue": 1,
+            "maxValue": 125,
+            "metadata": {
+                "description": "Number of instances of Application Gateway"
+            }
+        },
+        "autoScaleMinCapacity": {
+            "type": "int",
+            "defaultValue": 1,
+            "minValue": 1,
+            "maxValue": 125,
+            "metadata": {
+                "description": "Minimum number of instances for auto-scaling"
+            }
+        },
+        "autoScaleMaxCapacity": {
+            "type": "int",
+            "defaultValue": 10,
+            "minValue": 1,
+            "maxValue": 125,
+            "metadata": {
+                "description": "Maximum number of instances for auto-scaling"
+            }
+        },
+        "backendAddresses": {
+            "type": "array",
+            "defaultValue": [
+                {
+                    "ipAddress": "10.0.2.4"
+                },
+                {
+                    "ipAddress": "10.0.2.5"
+                }
+            ],
+            "metadata": {
+                "description": "Backend addresses for the application gateway"
+            }
+        },
+        "backendPort": {
+            "type": "int",
+            "defaultValue": 80,
+            "metadata": {
+                "description": "Port for backend servers"
+            }
+        },
+        "cookieBasedAffinity": {
+            "type": "string",
+            "defaultValue": "Disabled",
+            "allowedValues": [
+                "Enabled",
+                "Disabled"
+            ],
+            "metadata": {
+                "description": "Cookie based affinity setting"
+            }
+        },
+        "frontendPort": {
+            "type": "int",
+            "defaultValue": 80,
+            "metadata": {
+                "description": "Frontend port"
+            }
+        },
+        "protocol": {
+            "type": "string",
+            "defaultValue": "Http",
+            "allowedValues": [
+                "Http",
+                "Https"
+            ],
+            "metadata": {
+                "description": "Protocol for frontend and backend"
+            }
+        },
+        "requestTimeout": {
+            "type": "int",
+            "defaultValue": 20,
+            "metadata": {
+                "description": "Request timeout in seconds"
+            }
+        },
+        "healthProbeEnabled": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable custom health probe"
+            }
+        },
+        "healthProbePath": {
+            "type": "string",
+            "defaultValue": "/",
+            "metadata": {
+                "description": "Path for health probe"
+            }
+        },
+        "healthProbeInterval": {
+            "type": "int",
+            "defaultValue": 30,
+            "metadata": {
+                "description": "Health probe interval in seconds"
+            }
+        },
+        "healthProbeTimeout": {
+            "type": "int",
+            "defaultValue": 30,
+            "metadata": {
+                "description": "Health probe timeout in seconds"
+            }
+        },
+        "healthProbeUnhealthyThreshold": {
+            "type": "int",
+            "defaultValue": 3,
+            "metadata": {
+                "description": "Health probe unhealthy threshold"
+            }
+        },
+        "tags": {
+            "type": "object",
+            "defaultValue": {},
+            "metadata": {
+                "description": "Tags to apply to all resources"
+            }
+        }
+    },
+    "variables": {
+        "applicationGatewayPublicIPId": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPName'))]",
+        "applicationGatewaySubnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]",
+        "applicationGatewayId": "[resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName'))]",
+        "frontendIPConfigurationName": "appGatewayFrontendIP",
+        "frontendPortName": "appGatewayFrontendPort",
+        "backendAddressPoolName": "appGatewayBackendPool",
+        "backendHttpSettingsName": "appGatewayBackendHttpSettings",
+        "httpListenerName": "appGatewayHttpListener",
+        "requestRoutingRuleName": "rule1",
+        "healthProbeName": "customHealthProbe",
+        "isAutoScaleEnabled": "[or(equals(parameters('applicationGatewaySku'), 'Standard_v2'), equals(parameters('applicationGatewaySku'), 'WAF_v2'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2023-05-01",
+            "name": "[parameters('virtualNetworkName')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('tags')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('vnetAddressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[parameters('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnetAddressPrefix')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2023-05-01",
+            "name": "[parameters('publicIPName')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('tags')]",
+            "sku": {
+                "name": "[parameters('publicIPSku')]"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "[parameters('publicIPAllocationMethod')]"
+            }
+        },
+        {
+            "type": "Microsoft.Network/applicationGateways",
+            "apiVersion": "2023-05-01",
+            "name": "[parameters('applicationGatewayName')]",
+            "location": "[parameters('location')]",
+            "tags": "[parameters('tags')]",
+            "dependsOn": [
+                "[variables('applicationGatewayPublicIPId')]",
+                "[variables('applicationGatewaySubnetId')]"
+            ],
+            "properties": {
+                "sku": {
+                    "name": "[parameters('applicationGatewaySku')]",
+                    "tier": "[if(contains(parameters('applicationGatewaySku'), 'WAF'), 'WAF', 'Standard')]",
+                    "capacity": "[if(variables('isAutoScaleEnabled'), null(), parameters('capacity'))]"
+                },
+                "autoscaleConfiguration": "[if(variables('isAutoScaleEnabled'), createObject('minCapacity', parameters('autoScaleMinCapacity'), 'maxCapacity', parameters('autoScaleMaxCapacity')), null())]",
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "appGatewayIpConfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[variables('applicationGatewaySubnetId')]"
+                            }
+                        }
+                    }
+                ],
+                "frontendIPConfigurations": [
+                    {
+                        "name": "[variables('frontendIPConfigurationName')]",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[variables('applicationGatewayPublicIPId')]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "[variables('frontendPortName')]",
+                        "properties": {
+                            "port": "[parameters('frontendPort')]"
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "[variables('backendAddressPoolName')]",
+                        "properties": {
+                            "backendAddresses": "[parameters('backendAddresses')]"
+                        }
+                    }
+                ],
+                "backendHttpSettingsCollection": [
+                    {
+                        "name": "[variables('backendHttpSettingsName')]",
+                        "properties": {
+                            "port": "[parameters('backendPort')]",
+                            "protocol": "[parameters('protocol')]",
+                            "cookieBasedAffinity": "[parameters('cookieBasedAffinity')]",
+                            "requestTimeout": "[parameters('requestTimeout')]",
+                            "probe": "[if(parameters('healthProbeEnabled'), createObject('id', concat(variables('applicationGatewayId'), '/probes/', variables('healthProbeName'))), null())]"
+                        }
+                    }
+                ],
+                "httpListeners": [
+                    {
+                        "name": "[variables('httpListenerName')]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(variables('applicationGatewayId'), '/frontendIPConfigurations/', variables('frontendIPConfigurationName'))]"
+                            },
+                            "frontendPort": {
+                                "id": "[concat(variables('applicationGatewayId'), '/frontendPorts/', variables('frontendPortName'))]"
+                            },
+                            "protocol": "[parameters('protocol')]"
+                        }
+                    }
+                ],
+                "requestRoutingRules": [
+                    {
+                        "name": "[variables('requestRoutingRuleName')]",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[concat(variables('applicationGatewayId'), '/httpListeners/', variables('httpListenerName'))]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(variables('applicationGatewayId'), '/backendAddressPools/', variables('backendAddressPoolName'))]"
+                            },
+                            "backendHttpSettings": {
+                                "id": "[concat(variables('applicationGatewayId'), '/backendHttpSettingsCollection/', variables('backendHttpSettingsName'))]"
+                            },
+                            "priority": 100
+                        }
+                    }
+                ],
+                "probes": "[if(parameters('healthProbeEnabled'), createArray(createObject('name', variables('healthProbeName'), 'properties', createObject('protocol', parameters('protocol'), 'path', parameters('healthProbePath'), 'interval', parameters('healthProbeInterval'), 'timeout', parameters('healthProbeTimeout'), 'unhealthyThreshold', parameters('healthProbeUnhealthyThreshold'), 'minServers', 0, 'match', createObject('statusCodes', createArray('200-399'))))), createArray())]"
+            }
+        }
+    ],
+    "outputs": {
+        "applicationGatewayName": {
+            "type": "string",
+            "value": "[parameters('applicationGatewayName')]"
+        },
+        "applicationGatewayResourceId": {
+            "type": "string",
+            "value": "[variables('applicationGatewayId')]"
+        },
+        "publicIPAddress": {
+            "type": "string",
+            "value": "[reference(variables('applicationGatewayPublicIPId')).ipAddress]"
+        },
+        "publicIPFqdn": {
+            "type": "string",
+            "value": "[reference(variables('applicationGatewayPublicIPId')).dnsSettings.fqdn]",
+            "condition": "[not(empty(reference(variables('applicationGatewayPublicIPId')).dnsSettings.fqdn))]"
+        },
+        "virtualNetworkName": {
+            "type": "string",
+            "value": "[parameters('virtualNetworkName')]"
+        },
+        "subnetName": {
+            "type": "string",
+            "value": "[parameters('subnetName')]"
+        }
+    }
+}

@@ -1,0 +1,20 @@
+# Azure Application Gateway ARM Template
+
+This directory contains ARM templates and deployment scripts for Azure Application Gateway.
+
+## Quick Links
+
+- **[Complete Documentation](README.md)** - Comprehensive guide with all features and configuration options
+- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Step-by-step deployment instructions
+- **[Main Template](ApplicationGateway.json)** - ARM template file
+- **[Parameters](parameters.json)** - Sample parameters file
+- **[PowerShell Script](deploy.ps1)** - Automated deployment script for Windows
+- **[Bash Script](deploy.sh)** - Automated deployment script for Linux/macOS
+
+## Quick Start
+
+1. Edit `parameters.json` with your values
+2. Run `.\deploy.ps1 -ResourceGroupName "your-rg" -Location "eastus"`
+3. Follow post-deployment configuration steps
+
+For detailed instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
