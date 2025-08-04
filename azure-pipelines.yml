@@ -1,0 +1,153 @@
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - ARM_Deployments/AppGateway/*
+
+variables:
+  # Pipeline variables
+  azureServiceConnection: 'Azure-ServiceConnection' # Update with your service connection name
+  resourceGroupName: 'rg-appgateway-nonprod'
+  location: 'East US'
+  templateFile: 'ARM_Deployments/AppGateway/ApplicationGateway.json'
+  parametersFile: 'ARM_Deployments/AppGateway/parameters.json'
+  deploymentName: 'AppGateway-$(Build.BuildId)'
+
+stages:
+- stage: Validate
+  displayName: 'Validate ARM Template'
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate Application Gateway Template'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      displayName: 'Checkout Repository'
+    
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: 'Validate ARM Template'
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: '$(azureServiceConnection)'
+        subscriptionId: '$(subscriptionId)'
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: '$(resourceGroupName)'
+        location: '$(location)'
+        templateLocation: 'Linked artifact'
+        csmFile: '$(templateFile)'
+        csmParametersFile: '$(parametersFile)'
+        deploymentMode: 'Validation'
+        deploymentName: '$(deploymentName)-validate'
+
+- stage: Deploy
+  displayName: 'Deploy to Azure'
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployAppGateway
+    displayName: 'Deploy Application Gateway'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'nonprod-azure'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            displayName: 'Checkout Repository'
+          
+          - task: AzureResourceManagerTemplateDeployment@3
+            displayName: 'Deploy Application Gateway'
+            inputs:
+              deploymentScope: 'Resource Group'
+              azureResourceManagerConnection: '$(azureServiceConnection)'
+              subscriptionId: '$(subscriptionId)'
+              action: 'Create Or Update Resource Group'
+              resourceGroupName: '$(resourceGroupName)'
+              location: '$(location)'
+              templateLocation: 'Linked artifact'
+              csmFile: '$(templateFile)'
+              csmParametersFile: '$(parametersFile)'
+              deploymentMode: 'Incremental'
+              deploymentName: '$(deploymentName)'
+              deploymentOutputs: 'deploymentOutputs'
+          
+          - task: PowerShell@2
+            displayName: 'Display Deployment Outputs'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "=== Deployment Outputs ==="
+                $outputs = '$(deploymentOutputs)' | ConvertFrom-Json
+                $outputs.PSObject.Properties | ForEach-Object {
+                    Write-Host "$($_.Name): $($_.Value.value)"
+                }
+                
+                # Set pipeline variables for use in subsequent stages
+                if ($outputs.publicIPAddress) {
+                    Write-Host "##vso[task.setvariable variable=publicIPAddress;isOutput=true]$($outputs.publicIPAddress.value)"
+                }
+                if ($outputs.applicationGatewayName) {
+                    Write-Host "##vso[task.setvariable variable=applicationGatewayName;isOutput=true]$($outputs.applicationGatewayName.value)"
+                }
+
+- stage: PostDeployment
+  displayName: 'Post-Deployment Validation'
+  dependsOn: Deploy
+  condition: succeeded()
+  jobs:
+  - job: ValidateDeployment
+    displayName: 'Validate Deployment'
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables:
+      publicIPAddress: $[ stageDependencies.Deploy.DeployAppGateway.outputs['DeployAppGateway.publicIPAddress'] ]
+      applicationGatewayName: $[ stageDependencies.Deploy.DeployAppGateway.outputs['DeployAppGateway.applicationGatewayName'] ]
+    
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Check Application Gateway Status'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "=== Application Gateway Status ==="
+          az network application-gateway show \
+            --name $(applicationGatewayName) \
+            --resource-group $(resourceGroupName) \
+            --query '{name:name,location:location,provisioningState:provisioningState,operationalState:operationalState}' \
+            --output table
+          
+          echo ""
+          echo "=== Backend Health ==="
+          az network application-gateway show-backend-health \
+            --name $(applicationGatewayName) \
+            --resource-group $(resourceGroupName) \
+            --query 'backendAddressPools[0].backendHttpSettingsCollection[0].servers[0].health' \
+            --output table
+          
+          echo ""
+          echo "=== Public IP Address ==="
+          echo "Application Gateway is accessible at: http://$(publicIPAddress)"
+    
+    - task: PowerShell@2
+      displayName: 'Test HTTP Connectivity'
+      inputs:
+        targetType: 'inline'
+        script: |
+          try {
+              $response = Invoke-WebRequest -Uri "http://$(publicIPAddress)" -Method GET -TimeoutSec 30 -ErrorAction Stop
+              Write-Host "✅ HTTP connectivity test successful"
+              Write-Host "Status Code: $($response.StatusCode)"
+              Write-Host "Status Description: $($response.StatusDescription)"
+          }
+          catch {
+              Write-Warning "⚠️ HTTP connectivity test failed (this is expected if backend is not configured)"
+              Write-Host "Error: $($_.Exception.Message)"
+              Write-Host "This is normal for a new Application Gateway without configured backends"
+          }
