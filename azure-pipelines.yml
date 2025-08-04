@@ -59,13 +59,13 @@ stages:
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
             --parameters applicationGatewayName="$(applicationGatewayName)" \
-                        virtualNetworkName="$(virtualNetworkName)" \
-                        subnetName="$(subnetName)" \
-                        publicIPName="$(publicIPName)" \
-                        backendIPAddress="$(backendIPAddress)" \
-                        subnetAddressPrefix="$(subnetAddressPrefix)" \
-                        vnetAddressPrefix="$(vnetAddressPrefix)" \
-                        location="$(location)"
+            --parameters virtualNetworkName="$(virtualNetworkName)" \
+            --parameters subnetName="$(subnetName)" \
+            --parameters publicIPName="$(publicIPName)" \
+            --parameters backendIPAddress="$(backendIPAddress)" \
+            --parameters subnetAddressPrefix="$(subnetAddressPrefix)" \
+            --parameters vnetAddressPrefix="$(vnetAddressPrefix)" \
+            --parameters location="$(location)"
           
           echo "✅ Template validation completed successfully!"
 
@@ -113,29 +113,43 @@ stages:
                 az group create --name $(resourceGroupName) --location "$(location)" --output table
                 echo "✅ Resource group ready!"
           
-          - task: AzureResourceManagerTemplateDeployment@3
+          - task: AzureCLI@2
             displayName: 'Deploy Application Gateway'
             inputs:
-              deploymentScope: 'Resource Group'
-              azureResourceManagerConnection: '$(azureServiceConnection)'
-              subscriptionId: '$(subscriptionId)'
-              action: 'Create Or Update Resource Group'
-              resourceGroupName: '$(resourceGroupName)'
-              location: '$(location)'
-              templateLocation: 'Linked artifact'
-              csmFile: '$(templateFile)'
-              overrideParameters: |
-                -applicationGatewayName "$(applicationGatewayName)"
-                -virtualNetworkName "$(virtualNetworkName)"
-                -subnetName "$(subnetName)"
-                -publicIPName "$(publicIPName)"
-                -backendIPAddress "$(backendIPAddress)"
-                -subnetAddressPrefix "$(subnetAddressPrefix)"
-                -vnetAddressPrefix "$(vnetAddressPrefix)"
-                -location "$(location)"
-              deploymentMode: 'Incremental'
-              deploymentName: '$(deploymentName)'
-              deploymentOutputs: 'deploymentOutputs'
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Starting ARM template deployment..."
+                echo "📁 Template: $(templateFile)"
+                echo "🏷️  Deployment Name: $(deploymentName)"
+                echo "📍 Resource Group: $(resourceGroupName)"
+                echo "🌍 Location: $(location)"
+                
+                # Deploy the ARM template using Azure CLI
+                az deployment group create \
+                  --resource-group "$(resourceGroupName)" \
+                  --template-file "$(templateFile)" \
+                  --name "$(deploymentName)" \
+                  --parameters applicationGatewayName="$(applicationGatewayName)" \
+                  --parameters virtualNetworkName="$(virtualNetworkName)" \
+                  --parameters subnetName="$(subnetName)" \
+                  --parameters publicIPName="$(publicIPName)" \
+                  --parameters backendIPAddress="$(backendIPAddress)" \
+                  --parameters subnetAddressPrefix="$(subnetAddressPrefix)" \
+                  --parameters vnetAddressPrefix="$(vnetAddressPrefix)" \
+                  --parameters location="$(location)" \
+                  --verbose
+                
+                echo "✅ Deployment completed successfully!"
+                
+                # Get deployment outputs
+                echo "📤 Deployment outputs:"
+                az deployment group show \
+                  --resource-group "$(resourceGroupName)" \
+                  --name "$(deploymentName)" \
+                  --query properties.outputs \
+                  --output table
           
           - task: PowerShell@2
             displayName: '📊 Display Deployment Results'
