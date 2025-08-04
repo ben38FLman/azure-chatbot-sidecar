@@ -13,7 +13,7 @@ variables:
   
   # Resource Settings
   resourceGroupName: 'rg-appgateway-nonprod'
-  location: 'East US'
+  location: 'eastus'
   
   # Template Files
   templateFile: 'ARM_Deployments/AppGateway/ApplicationGateway.json'
