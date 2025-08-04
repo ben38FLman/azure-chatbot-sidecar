@@ -8,7 +8,7 @@ trigger:
 
 variables:
   # Azure Connection Settings - UPDATE THESE VALUES
-  azureServiceConnection: 'MSFT-NonProd-DevOps'  # Update with your service connection name
+  azureServiceConnection: 'MSFT-NonProd-ServiceConnection'  # Update with your service connection name
   subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'             # Update with your subscription ID
   
   # Resource Settings
@@ -52,17 +52,19 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           echo "🔍 Validating ARM template syntax..."
+          echo "🏗️ Creating resource group for validation..."
+          az group create --name $(resourceGroupName) --location "$(location)" --output table
+          
           az deployment group validate \
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
-            --parameters @$(parametersFile) \
-            --parameters applicationGatewayName=$(applicationGatewayName) \
-                        virtualNetworkName=$(virtualNetworkName) \
-                        subnetName=$(subnetName) \
-                        publicIPName=$(publicIPName) \
-                        backendIPAddress=$(backendIPAddress) \
-                        subnetAddressPrefix=$(subnetAddressPrefix) \
-                        vnetAddressPrefix=$(vnetAddressPrefix) \
+            --parameters applicationGatewayName="$(applicationGatewayName)" \
+                        virtualNetworkName="$(virtualNetworkName)" \
+                        subnetName="$(subnetName)" \
+                        publicIPName="$(publicIPName)" \
+                        backendIPAddress="$(backendIPAddress)" \
+                        subnetAddressPrefix="$(subnetAddressPrefix)" \
+                        vnetAddressPrefix="$(vnetAddressPrefix)" \
                         location="$(location)"
           
           echo "✅ Template validation completed successfully!"
@@ -122,15 +124,14 @@ stages:
               location: '$(location)'
               templateLocation: 'Linked artifact'
               csmFile: '$(templateFile)'
-              csmParametersFile: '$(parametersFile)'
               overrideParameters: |
-                -applicationGatewayName $(applicationGatewayName)
-                -virtualNetworkName $(virtualNetworkName)
-                -subnetName $(subnetName)
-                -publicIPName $(publicIPName)
-                -backendIPAddress $(backendIPAddress)
-                -subnetAddressPrefix $(subnetAddressPrefix)
-                -vnetAddressPrefix $(vnetAddressPrefix)
+                -applicationGatewayName "$(applicationGatewayName)"
+                -virtualNetworkName "$(virtualNetworkName)"
+                -subnetName "$(subnetName)"
+                -publicIPName "$(publicIPName)"
+                -backendIPAddress "$(backendIPAddress)"
+                -subnetAddressPrefix "$(subnetAddressPrefix)"
+                -vnetAddressPrefix "$(vnetAddressPrefix)"
                 -location "$(location)"
               deploymentMode: 'Incremental'
               deploymentName: '$(deploymentName)'
