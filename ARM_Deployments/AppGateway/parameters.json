@@ -15,10 +15,10 @@
             "value": "appgateway-subnet"
         },
         "subnetAddressPrefix": {
-            "value": "10.0.1.0/24"
+            "value": "10.10.1.32/27"
         },
         "vnetAddressPrefix": {
-            "value": "10.0.0.0/16"
+            "value": "10.10.0.0/22"
         },
         "publicIPName": {
             "value": "myapp-gateway-pip"
