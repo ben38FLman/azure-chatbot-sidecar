@@ -8,7 +8,7 @@ variables:
   
   # Resource Group Settings
   resourceGroupName: 'rg-appgateway-nonprod'         # UPDATE: Your resource group name
-  location: 'East US'                                 # UPDATE: Your preferred Azure region
+  location: 'eastus'                                 # UPDATE: Your preferred Azure region
   
   # Template Settings
   templateFile: 'ARM_Deployments/AppGateway/ApplicationGateway.json'
