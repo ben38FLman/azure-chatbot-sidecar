@@ -15,12 +15,12 @@ variables:
   resourceGroupName: 'rg-appgateway-nonprod'
   location: 'eastus'
   
-  # Template Files
-  templateFile: 'ARM_Deployments/AppGateway/ApplicationGateway.json'
-  parametersFile: 'ARM_Deployments/AppGateway/parameters.json'
+  # Template Files - Updated to use basic template
+  templateFile: 'ARM_Deployments/AppGateway/ApplicationGateway-Basic.json'
+  parametersFile: 'ARM_Deployments/AppGateway/parameters-basic.json'
   
   # Deployment Settings
-  deploymentName: 'AppGateway-$(Build.BuildId)'
+  deploymentName: 'AppGateway-Basic-$(Build.BuildId)'
   
   # Application Gateway Configuration (these will override parameters.json if needed)
   applicationGatewayName: 'agw-benruggiero-nonprod'

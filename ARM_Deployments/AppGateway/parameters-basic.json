@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "applicationGatewayName": {
+      "value": "agw-basic-nonprod"
+    },
+    "publicIPName": {
+      "value": "pip-agw-basic-nonprod"
+    },
+    "subnetId": {
+      "value": "/subscriptions/f16506c7-8141-4ef7-8a2e-67f11b6f8acd/resourceGroups/rg-appgateway-nonprod/providers/Microsoft.Network/virtualNetworks/vnet-basic-nonprod/subnets/snet-appgateway"
+    }
+  }
+}
