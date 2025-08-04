@@ -8,8 +8,8 @@ trigger:
 
 variables:
   # Azure Connection Settings - UPDATE THESE VALUES
-  azureServiceConnection: 'Azure-ServiceConnection'  # Update with your service connection name
-  subscriptionId: 'your-subscription-id'             # Update with your subscription ID
+  azureServiceConnection: 'MSFT-NonProd-DevOps'  # Update with your service connection name
+  subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'             # Update with your subscription ID
   
   # Resource Settings
   resourceGroupName: 'rg-appgateway-nonprod'
