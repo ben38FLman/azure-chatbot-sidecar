@@ -1,185 +1,139 @@
-# Azure Application Gateway ARM Template
+# Azure Application Gateway - Basic ARM Template
 
-This ARM template deploys an Azure Application Gateway with associated resources including a virtual network, subnet, and public IP address.
+This is a simplified ARM template that deploys the minimum required components for an Azure Application Gateway. After deployment, you can configure additional settings through the Azure Portal or Azure CLI.
 
-## Resources Deployed
+## What Gets Deployed
 
-- **Virtual Network**: Creates a new VNet with a dedicated subnet for the Application Gateway
-- **Public IP Address**: Static public IP for the Application Gateway frontend
-- **Application Gateway**: Layer 7 load balancer with configurable backend pools and health probes
+- **Virtual Network** with a single subnet for the Application Gateway
+- **Public IP Address** (Standard SKU, Static allocation)
+- **Application Gateway** (Standard_v2 SKU with basic configuration)
 
-## Features
+## Required Parameters
 
-- **Auto-scaling**: Supports both fixed capacity and auto-scaling configurations (for Standard_v2 and WAF_v2 SKUs)
-- **Health Probes**: Configurable custom health probes for backend health monitoring
-- **Flexible Backend Configuration**: Support for multiple backend addresses
-- **Multiple SKU Support**: Compatible with Standard and WAF SKUs
-- **Comprehensive Tagging**: Apply tags to all resources for better organization
+You only need to provide these essential parameters:
 
-## Parameters
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `applicationGatewayName` | Name for your Application Gateway | `myapp-gateway` |
+| `virtualNetworkName` | Name for the virtual network | `myapp-vnet` |
+| `subnetName` | Name for the Application Gateway subnet | `appgateway-subnet` |
+| `publicIPName` | Name for the public IP address | `myapp-gateway-pip` |
+| `backendIPAddress` | IP address of your backend server | `10.0.2.10` |
 
-### Required Parameters
-- `applicationGatewayName`: Name of the Application Gateway
-- `virtualNetworkName`: Name of the virtual network
-- `subnetName`: Name of the subnet for Application Gateway
-- `publicIPName`: Name of the public IP address
+## Optional Parameters (with defaults)
 
-### Optional Parameters (with defaults)
-- `location`: Azure region (defaults to resource group location)
-- `applicationGatewaySku`: SKU of the Application Gateway (default: Standard_v2)
-- `capacity`: Number of instances (default: 2, ignored for v2 SKUs with auto-scaling)
-- `autoScaleMinCapacity`: Minimum instances for auto-scaling (default: 1)
-- `autoScaleMaxCapacity`: Maximum instances for auto-scaling (default: 10)
-- `backendAddresses`: Array of backend server addresses
-- `frontendPort`: Frontend port (default: 80)
-- `backendPort`: Backend port (default: 80)
-- `protocol`: Protocol for communication (default: Http)
-- `healthProbeEnabled`: Enable custom health probe (default: true)
-- `tags`: Object containing tags to apply to resources
+| Parameter | Default Value | Description |
+|-----------|---------------|-------------|
+| `location` | Resource group location | Azure region |
+| `subnetAddressPrefix` | `10.0.1.0/24` | Address range for App Gateway subnet |
+| `vnetAddressPrefix` | `10.0.0.0/16` | Address range for virtual network |
 
-## Deployment Instructions
+## Default Configuration
 
-### Prerequisites
-- Azure subscription
-- Appropriate permissions to create resources in the target resource group
-- Azure CLI or Azure PowerShell
+The template creates an Application Gateway with these default settings:
 
-### Deploy using Azure CLI
+- **SKU**: Standard_v2 (supports auto-scaling)
+- **Capacity**: Auto-scale between 1-2 instances
+- **Frontend**: Port 80 (HTTP)
+- **Backend**: Port 80 (HTTP)
+- **Protocol**: HTTP
+- **Timeout**: 20 seconds
+- **Affinity**: Disabled
 
+## Quick Deployment
+
+### 1. Edit Parameters
+Update `parameters.json` with your values:
+
+```json
+{
+  "applicationGatewayName": {"value": "YOUR-GATEWAY-NAME"},
+  "virtualNetworkName": {"value": "YOUR-VNET-NAME"},
+  "subnetName": {"value": "YOUR-SUBNET-NAME"},
+  "publicIPName": {"value": "YOUR-PIP-NAME"},
+  "backendIPAddress": {"value": "YOUR-BACKEND-IP"}
+}
+```
+
+### 2. Deploy with PowerShell
+```powershell
+.\deploy.ps1 -ResourceGroupName "my-resource-group" -Location "eastus"
+```
+
+### 3. Deploy with Azure CLI
 ```bash
-# Create a resource group (if it doesn't exist)
-az group create --name myResourceGroup --location eastus
-
-# Deploy the template
 az deployment group create \
-  --resource-group myResourceGroup \
+  --resource-group my-resource-group \
   --template-file ApplicationGateway.json \
   --parameters @parameters.json
 ```
 
-### Deploy using Azure PowerShell
-
-```powershell
-# Create a resource group (if it doesn't exist)
-New-AzResourceGroup -Name "myResourceGroup" -Location "East US"
-
-# Deploy the template
-New-AzResourceGroupDeployment `
-  -ResourceGroupName "myResourceGroup" `
-  -TemplateFile "ApplicationGateway.json" `
-  -TemplateParameterFile "parameters.json"
-```
-
-### Deploy using Azure Portal
-
-1. Go to the Azure Portal
-2. Create a new deployment from template
-3. Upload the `ApplicationGateway.json` file
-4. Fill in the required parameters or upload the `parameters.json` file
-5. Review and create
-
-## Configuration Examples
-
-### Basic Web Application
-```json
-{
-  "backendAddresses": [
-    {"ipAddress": "10.0.2.4"},
-    {"ipAddress": "10.0.2.5"}
-  ],
-  "frontendPort": 80,
-  "backendPort": 80,
-  "protocol": "Http"
-}
-```
-
-### High Availability Setup
-```json
-{
-  "applicationGatewaySku": "Standard_v2",
-  "autoScaleMinCapacity": 2,
-  "autoScaleMaxCapacity": 20,
-  "healthProbeEnabled": true,
-  "healthProbePath": "/health"
-}
-```
-
-### WAF-Enabled Configuration
-```json
-{
-  "applicationGatewaySku": "WAF_v2",
-  "autoScaleMinCapacity": 1,
-  "autoScaleMaxCapacity": 10
-}
-```
-
 ## Post-Deployment Configuration
 
-After deployment, you may need to:
+After the basic deployment, you can add these features through the Azure Portal:
 
-1. **Configure SSL certificates** (for HTTPS listeners)
-2. **Set up additional routing rules** for complex applications
-3. **Configure WAF policies** (if using WAF SKU)
-4. **Update DNS records** to point to the Application Gateway's public IP
-5. **Configure backend applications** to accept traffic from the Application Gateway subnet
+### Security Features
+- **SSL/TLS certificates** for HTTPS
+- **Web Application Firewall (WAF)** rules
+- **Custom security policies**
 
-## Monitoring and Troubleshooting
+### Advanced Routing
+- **Path-based routing** rules
+- **Multi-site hosting**
+- **URL rewrite rules**
+- **Custom error pages**
 
-### Key Metrics to Monitor
-- Backend response time
-- Failed requests
-- Healthy host count
-- Application Gateway total time
+### Backend Configuration
+- **Additional backend pools**
+- **Health probes** with custom paths
+- **Session affinity** settings
+- **Connection draining**
+
+### Monitoring & Diagnostics
+- **Application Insights** integration
+- **Diagnostic logs**
+- **Metrics and alerts**
+- **Network Watcher** integration
+
+## Common Next Steps
+
+1. **Add HTTPS**: Upload SSL certificates and configure HTTPS listeners
+2. **Configure custom health probes**: Set up health checks for your backends
+3. **Add more backends**: Scale out your application with multiple backend servers
+4. **Set up monitoring**: Configure alerts and dashboards
+5. **Implement WAF**: Add web application firewall protection
+
+## Network Requirements
+
+- **Subnet size**: Minimum /27 (32 IP addresses) for the Application Gateway
+- **Backend connectivity**: Ensure your backend servers are reachable from the Application Gateway subnet
+- **NSG rules**: Allow traffic on ports 65200-65535 (for v1) or 65503-65534 (for v2) for Azure infrastructure
+
+## Troubleshooting
 
 ### Common Issues
-- **Backend health probe failures**: Check the health probe path and backend server health
-- **502 Bad Gateway errors**: Verify backend server configuration and network connectivity
-- **SSL certificate issues**: Ensure certificates are properly configured and not expired
+- **502 errors**: Check if backend servers are running and accessible
+- **Deployment failures**: Verify subnet sizes and IP address ranges
+- **Connectivity issues**: Check NSG rules and routing tables
 
-## Networking Considerations
+### Useful Commands
+```bash
+# Check Application Gateway status
+az network application-gateway show --name YOUR-GATEWAY-NAME --resource-group YOUR-RG
 
-- The Application Gateway requires a dedicated subnet
-- Minimum subnet size is /27 (32 addresses)
-- Network Security Groups (NSGs) must allow traffic on ports 65200-65535 for v1 SKUs, or 65503-65534 for v2 SKUs
-- Backend servers should be configured to accept traffic from the Application Gateway subnet
+# View backend health
+az network application-gateway show-backend-health --name YOUR-GATEWAY-NAME --resource-group YOUR-RG
+```
 
-## Cost Optimization
+## Template Files
 
-- Use Standard_v2 or WAF_v2 SKUs for auto-scaling capabilities
-- Configure appropriate auto-scaling limits based on expected traffic
-- Monitor usage and adjust capacity as needed
-- Consider reserved instances for predictable workloads
+| File | Purpose |
+|------|---------|
+| `ApplicationGateway.json` | Main ARM template |
+| `parameters.json` | Sample parameters file |
+| `deploy.ps1` | PowerShell deployment script |
+| `deploy.sh` | Bash deployment script |
 
-## Security Best Practices
+---
 
-1. Use WAF SKU for web application protection
-2. Configure SSL/TLS certificates for HTTPS traffic
-3. Implement proper backend authentication
-4. Use Azure Key Vault for certificate management
-5. Configure appropriate NSG rules
-6. Enable diagnostic logging and monitoring
-
-## Template Outputs
-
-The template provides the following outputs:
-- `applicationGatewayName`: Name of the deployed Application Gateway
-- `applicationGatewayResourceId`: Resource ID of the Application Gateway
-- `publicIPAddress`: Public IP address assigned to the Application Gateway
-- `publicIPFqdn`: FQDN of the public IP (if configured)
-- `virtualNetworkName`: Name of the virtual network
-- `subnetName`: Name of the Application Gateway subnet
-
-## Support and Contributing
-
-For issues or questions related to this template:
-1. Check the Azure Application Gateway documentation
-2. Review Azure Resource Manager template best practices
-3. Submit issues or improvements through your DevOps process
-
-## Version History
-
-- **v1.0**: Initial release with basic Application Gateway deployment
-  - Support for Standard and WAF SKUs
-  - Auto-scaling configuration for v2 SKUs
-  - Custom health probes
-  - Comprehensive parameter validation
+**Note**: This template creates a basic Application Gateway suitable for development/testing. For production deployments, consider additional security, monitoring, and high availability configurations.

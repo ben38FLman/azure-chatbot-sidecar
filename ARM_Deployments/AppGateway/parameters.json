@@ -23,70 +23,8 @@
         "publicIPName": {
             "value": "myapp-gateway-pip"
         },
-        "publicIPAllocationMethod": {
-            "value": "Static"
-        },
-        "publicIPSku": {
-            "value": "Standard"
-        },
-        "applicationGatewaySku": {
-            "value": "Standard_v2"
-        },
-        "capacity": {
-            "value": 2
-        },
-        "autoScaleMinCapacity": {
-            "value": 1
-        },
-        "autoScaleMaxCapacity": {
-            "value": 10
-        },
-        "backendAddresses": {
-            "value": [
-                {
-                    "ipAddress": "10.0.2.4"
-                },
-                {
-                    "ipAddress": "10.0.2.5"
-                }
-            ]
-        },
-        "backendPort": {
-            "value": 80
-        },
-        "cookieBasedAffinity": {
-            "value": "Disabled"
-        },
-        "frontendPort": {
-            "value": 80
-        },
-        "protocol": {
-            "value": "Http"
-        },
-        "requestTimeout": {
-            "value": 20
-        },
-        "healthProbeEnabled": {
-            "value": true
-        },
-        "healthProbePath": {
-            "value": "/"
-        },
-        "healthProbeInterval": {
-            "value": 30
-        },
-        "healthProbeTimeout": {
-            "value": 30
-        },
-        "healthProbeUnhealthyThreshold": {
-            "value": 3
-        },
-        "tags": {
-            "value": {
-                "Environment": "NonProd",
-                "Project": "DevOps Templates",
-                "Owner": "Infrastructure Team"
-            }
+        "backendIPAddress": {
+            "value": "10.0.2.10"
         }
     }
 }

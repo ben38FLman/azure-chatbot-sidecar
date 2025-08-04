@@ -47,191 +47,24 @@
                 "description": "Name of the public IP address"
             }
         },
-        "publicIPAllocationMethod": {
+        "backendIPAddress": {
             "type": "string",
-            "defaultValue": "Static",
-            "allowedValues": [
-                "Dynamic",
-                "Static"
-            ],
+            "defaultValue": "10.0.2.10",
             "metadata": {
-                "description": "Public IP allocation method"
-            }
-        },
-        "publicIPSku": {
-            "type": "string",
-            "defaultValue": "Standard",
-            "allowedValues": [
-                "Basic",
-                "Standard"
-            ],
-            "metadata": {
-                "description": "Public IP SKU"
-            }
-        },
-        "applicationGatewaySku": {
-            "type": "string",
-            "defaultValue": "Standard_v2",
-            "allowedValues": [
-                "Standard_Small",
-                "Standard_Medium",
-                "Standard_Large",
-                "Standard_v2",
-                "WAF_Medium",
-                "WAF_Large",
-                "WAF_v2"
-            ],
-            "metadata": {
-                "description": "SKU of the Application Gateway"
-            }
-        },
-        "capacity": {
-            "type": "int",
-            "defaultValue": 2,
-            "minValue": 1,
-            "maxValue": 125,
-            "metadata": {
-                "description": "Number of instances of Application Gateway"
-            }
-        },
-        "autoScaleMinCapacity": {
-            "type": "int",
-            "defaultValue": 1,
-            "minValue": 1,
-            "maxValue": 125,
-            "metadata": {
-                "description": "Minimum number of instances for auto-scaling"
-            }
-        },
-        "autoScaleMaxCapacity": {
-            "type": "int",
-            "defaultValue": 10,
-            "minValue": 1,
-            "maxValue": 125,
-            "metadata": {
-                "description": "Maximum number of instances for auto-scaling"
-            }
-        },
-        "backendAddresses": {
-            "type": "array",
-            "defaultValue": [
-                {
-                    "ipAddress": "10.0.2.4"
-                },
-                {
-                    "ipAddress": "10.0.2.5"
-                }
-            ],
-            "metadata": {
-                "description": "Backend addresses for the application gateway"
-            }
-        },
-        "backendPort": {
-            "type": "int",
-            "defaultValue": 80,
-            "metadata": {
-                "description": "Port for backend servers"
-            }
-        },
-        "cookieBasedAffinity": {
-            "type": "string",
-            "defaultValue": "Disabled",
-            "allowedValues": [
-                "Enabled",
-                "Disabled"
-            ],
-            "metadata": {
-                "description": "Cookie based affinity setting"
-            }
-        },
-        "frontendPort": {
-            "type": "int",
-            "defaultValue": 80,
-            "metadata": {
-                "description": "Frontend port"
-            }
-        },
-        "protocol": {
-            "type": "string",
-            "defaultValue": "Http",
-            "allowedValues": [
-                "Http",
-                "Https"
-            ],
-            "metadata": {
-                "description": "Protocol for frontend and backend"
-            }
-        },
-        "requestTimeout": {
-            "type": "int",
-            "defaultValue": 20,
-            "metadata": {
-                "description": "Request timeout in seconds"
-            }
-        },
-        "healthProbeEnabled": {
-            "type": "bool",
-            "defaultValue": true,
-            "metadata": {
-                "description": "Enable custom health probe"
-            }
-        },
-        "healthProbePath": {
-            "type": "string",
-            "defaultValue": "/",
-            "metadata": {
-                "description": "Path for health probe"
-            }
-        },
-        "healthProbeInterval": {
-            "type": "int",
-            "defaultValue": 30,
-            "metadata": {
-                "description": "Health probe interval in seconds"
-            }
-        },
-        "healthProbeTimeout": {
-            "type": "int",
-            "defaultValue": 30,
-            "metadata": {
-                "description": "Health probe timeout in seconds"
-            }
-        },
-        "healthProbeUnhealthyThreshold": {
-            "type": "int",
-            "defaultValue": 3,
-            "metadata": {
-                "description": "Health probe unhealthy threshold"
-            }
-        },
-        "tags": {
-            "type": "object",
-            "defaultValue": {},
-            "metadata": {
-                "description": "Tags to apply to all resources"
+                "description": "Backend server IP address"
             }
         }
     },
     "variables": {
         "applicationGatewayPublicIPId": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPName'))]",
-        "applicationGatewaySubnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]",
-        "applicationGatewayId": "[resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName'))]",
-        "frontendIPConfigurationName": "appGatewayFrontendIP",
-        "frontendPortName": "appGatewayFrontendPort",
-        "backendAddressPoolName": "appGatewayBackendPool",
-        "backendHttpSettingsName": "appGatewayBackendHttpSettings",
-        "httpListenerName": "appGatewayHttpListener",
-        "requestRoutingRuleName": "rule1",
-        "healthProbeName": "customHealthProbe",
-        "isAutoScaleEnabled": "[or(equals(parameters('applicationGatewaySku'), 'Standard_v2'), equals(parameters('applicationGatewaySku'), 'WAF_v2'))]"
+        "applicationGatewaySubnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]"
     },
     "resources": [
         {
             "type": "Microsoft.Network/virtualNetworks",
-            "apiVersion": "2023-05-01",
+            "apiVersion": "2017-06-01",
             "name": "[parameters('virtualNetworkName')]",
             "location": "[parameters('location')]",
-            "tags": "[parameters('tags')]",
             "properties": {
                 "addressSpace": {
                     "addressPrefixes": [
@@ -250,34 +83,34 @@
         },
         {
             "type": "Microsoft.Network/publicIPAddresses",
-            "apiVersion": "2023-05-01",
+            "apiVersion": "2017-08-01",
             "name": "[parameters('publicIPName')]",
             "location": "[parameters('location')]",
-            "tags": "[parameters('tags')]",
             "sku": {
-                "name": "[parameters('publicIPSku')]"
+                "name": "Standard"
             },
             "properties": {
-                "publicIPAllocationMethod": "[parameters('publicIPAllocationMethod')]"
+                "publicIPAllocationMethod": "Static"
             }
         },
         {
             "type": "Microsoft.Network/applicationGateways",
-            "apiVersion": "2023-05-01",
+            "apiVersion": "2018-12-01",
             "name": "[parameters('applicationGatewayName')]",
             "location": "[parameters('location')]",
-            "tags": "[parameters('tags')]",
             "dependsOn": [
                 "[variables('applicationGatewayPublicIPId')]",
                 "[variables('applicationGatewaySubnetId')]"
             ],
             "properties": {
                 "sku": {
-                    "name": "[parameters('applicationGatewaySku')]",
-                    "tier": "[if(contains(parameters('applicationGatewaySku'), 'WAF'), 'WAF', 'Standard')]",
-                    "capacity": "[if(variables('isAutoScaleEnabled'), null(), parameters('capacity'))]"
+                    "name": "Standard_v2",
+                    "tier": "Standard"
                 },
-                "autoscaleConfiguration": "[if(variables('isAutoScaleEnabled'), createObject('minCapacity', parameters('autoScaleMinCapacity'), 'maxCapacity', parameters('autoScaleMaxCapacity')), null())]",
+                "autoscaleConfiguration": {
+                    "minCapacity": 1,
+                    "maxCapacity": 2
+                },
                 "gatewayIPConfigurations": [
                     {
                         "name": "appGatewayIpConfig",
@@ -290,7 +123,7 @@
                 ],
                 "frontendIPConfigurations": [
                     {
-                        "name": "[variables('frontendIPConfigurationName')]",
+                        "name": "appGatewayFrontendIP",
                         "properties": {
                             "publicIPAddress": {
                                 "id": "[variables('applicationGatewayPublicIPId')]"
@@ -300,65 +133,67 @@
                 ],
                 "frontendPorts": [
                     {
-                        "name": "[variables('frontendPortName')]",
+                        "name": "appGatewayFrontendPort",
                         "properties": {
-                            "port": "[parameters('frontendPort')]"
+                            "port": 80
                         }
                     }
                 ],
                 "backendAddressPools": [
                     {
-                        "name": "[variables('backendAddressPoolName')]",
+                        "name": "appGatewayBackendPool",
                         "properties": {
-                            "backendAddresses": "[parameters('backendAddresses')]"
+                            "backendAddresses": [
+                                {
+                                    "ipAddress": "[parameters('backendIPAddress')]"
+                                }
+                            ]
                         }
                     }
                 ],
                 "backendHttpSettingsCollection": [
                     {
-                        "name": "[variables('backendHttpSettingsName')]",
+                        "name": "appGatewayBackendHttpSettings",
                         "properties": {
-                            "port": "[parameters('backendPort')]",
-                            "protocol": "[parameters('protocol')]",
-                            "cookieBasedAffinity": "[parameters('cookieBasedAffinity')]",
-                            "requestTimeout": "[parameters('requestTimeout')]",
-                            "probe": "[if(parameters('healthProbeEnabled'), createObject('id', concat(variables('applicationGatewayId'), '/probes/', variables('healthProbeName'))), null())]"
+                            "port": 80,
+                            "protocol": "Http",
+                            "cookieBasedAffinity": "Disabled",
+                            "requestTimeout": 20
                         }
                     }
                 ],
                 "httpListeners": [
                     {
-                        "name": "[variables('httpListenerName')]",
+                        "name": "appGatewayHttpListener",
                         "properties": {
                             "frontendIPConfiguration": {
-                                "id": "[concat(variables('applicationGatewayId'), '/frontendIPConfigurations/', variables('frontendIPConfigurationName'))]"
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName')), '/frontendIPConfigurations/appGatewayFrontendIP')]"
                             },
                             "frontendPort": {
-                                "id": "[concat(variables('applicationGatewayId'), '/frontendPorts/', variables('frontendPortName'))]"
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName')), '/frontendPorts/appGatewayFrontendPort')]"
                             },
-                            "protocol": "[parameters('protocol')]"
+                            "protocol": "Http"
                         }
                     }
                 ],
                 "requestRoutingRules": [
                     {
-                        "name": "[variables('requestRoutingRuleName')]",
+                        "name": "rule1",
                         "properties": {
                             "ruleType": "Basic",
+                            "priority": 100,
                             "httpListener": {
-                                "id": "[concat(variables('applicationGatewayId'), '/httpListeners/', variables('httpListenerName'))]"
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName')), '/httpListeners/appGatewayHttpListener')]"
                             },
                             "backendAddressPool": {
-                                "id": "[concat(variables('applicationGatewayId'), '/backendAddressPools/', variables('backendAddressPoolName'))]"
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName')), '/backendAddressPools/appGatewayBackendPool')]"
                             },
                             "backendHttpSettings": {
-                                "id": "[concat(variables('applicationGatewayId'), '/backendHttpSettingsCollection/', variables('backendHttpSettingsName'))]"
-                            },
-                            "priority": 100
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName')), '/backendHttpSettingsCollection/appGatewayBackendHttpSettings')]"
+                            }
                         }
                     }
-                ],
-                "probes": "[if(parameters('healthProbeEnabled'), createArray(createObject('name', variables('healthProbeName'), 'properties', createObject('protocol', parameters('protocol'), 'path', parameters('healthProbePath'), 'interval', parameters('healthProbeInterval'), 'timeout', parameters('healthProbeTimeout'), 'unhealthyThreshold', parameters('healthProbeUnhealthyThreshold'), 'minServers', 0, 'match', createObject('statusCodes', createArray('200-399'))))), createArray())]"
+                ]
             }
         }
     ],
@@ -367,26 +202,13 @@
             "type": "string",
             "value": "[parameters('applicationGatewayName')]"
         },
-        "applicationGatewayResourceId": {
-            "type": "string",
-            "value": "[variables('applicationGatewayId')]"
-        },
         "publicIPAddress": {
             "type": "string",
             "value": "[reference(variables('applicationGatewayPublicIPId')).ipAddress]"
         },
-        "publicIPFqdn": {
-            "type": "string",
-            "value": "[reference(variables('applicationGatewayPublicIPId')).dnsSettings.fqdn]",
-            "condition": "[not(empty(reference(variables('applicationGatewayPublicIPId')).dnsSettings.fqdn))]"
-        },
         "virtualNetworkName": {
             "type": "string",
             "value": "[parameters('virtualNetworkName')]"
-        },
-        "subnetName": {
-            "type": "string",
-            "value": "[parameters('subnetName')]"
         }
     }
 }
