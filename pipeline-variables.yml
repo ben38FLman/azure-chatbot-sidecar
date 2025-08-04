@@ -3,8 +3,8 @@
 
 variables:
   # Azure Connection
-  azureServiceConnection: 'Azure-ServiceConnection'  # UPDATE: Name of your Azure service connection
-  subscriptionId: 'your-subscription-id'              # UPDATE: Your Azure subscription ID
+  azureServiceConnection: 'MSFT-NonProd-ServiceConnection'  # UPDATE: Name of your Azure service connection
+  subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'              # UPDATE: Your Azure subscription ID
   
   # Resource Group Settings
   resourceGroupName: 'rg-appgateway-nonprod'         # UPDATE: Your resource group name
