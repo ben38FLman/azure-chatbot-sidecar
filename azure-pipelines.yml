@@ -7,17 +7,33 @@ trigger:
     - ARM_Deployments/AppGateway/*
 
 variables:
-  # Pipeline variables
-  azureServiceConnection: 'Azure-ServiceConnection' # Update with your service connection name
+  # Azure Connection Settings - UPDATE THESE VALUES
+  azureServiceConnection: 'Azure-ServiceConnection'  # Update with your service connection name
+  subscriptionId: 'your-subscription-id'             # Update with your subscription ID
+  
+  # Resource Settings
   resourceGroupName: 'rg-appgateway-nonprod'
   location: 'East US'
+  
+  # Template Files
   templateFile: 'ARM_Deployments/AppGateway/ApplicationGateway.json'
   parametersFile: 'ARM_Deployments/AppGateway/parameters.json'
+  
+  # Deployment Settings
   deploymentName: 'AppGateway-$(Build.BuildId)'
+  
+  # Application Gateway Configuration (these will override parameters.json if needed)
+  applicationGatewayName: 'agw-benruggiero-nonprod'
+  virtualNetworkName: 'vnet-benruggiero-nonprod'
+  subnetName: 'snet-appgateway'
+  publicIPName: 'pip-appgateway-nonprod'
+  backendIPAddress: '10.10.2.10'
+  subnetAddressPrefix: '10.10.1.32/27'
+  vnetAddressPrefix: '10.10.0.0/22'
 
 stages:
 - stage: Validate
-  displayName: 'Validate ARM Template'
+  displayName: '🔍 Validate ARM Template'
   jobs:
   - job: ValidateTemplate
     displayName: 'Validate Application Gateway Template'
@@ -28,23 +44,47 @@ stages:
     - checkout: self
       displayName: 'Checkout Repository'
     
-    - task: AzureResourceManagerTemplateDeployment@3
-      displayName: 'Validate ARM Template'
+    - task: AzureCLI@2
+      displayName: 'Validate ARM Template Syntax'
       inputs:
-        deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: '$(azureServiceConnection)'
-        subscriptionId: '$(subscriptionId)'
-        action: 'Create Or Update Resource Group'
-        resourceGroupName: '$(resourceGroupName)'
-        location: '$(location)'
-        templateLocation: 'Linked artifact'
-        csmFile: '$(templateFile)'
-        csmParametersFile: '$(parametersFile)'
-        deploymentMode: 'Validation'
-        deploymentName: '$(deploymentName)-validate'
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Validating ARM template syntax..."
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file $(templateFile) \
+            --parameters @$(parametersFile) \
+            --parameters applicationGatewayName=$(applicationGatewayName) \
+                        virtualNetworkName=$(virtualNetworkName) \
+                        subnetName=$(subnetName) \
+                        publicIPName=$(publicIPName) \
+                        backendIPAddress=$(backendIPAddress) \
+                        subnetAddressPrefix=$(subnetAddressPrefix) \
+                        vnetAddressPrefix=$(vnetAddressPrefix) \
+                        location="$(location)"
+          
+          echo "✅ Template validation completed successfully!"
+
+    - task: PowerShell@2
+      displayName: 'Display Configuration'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "🎯 Deployment Configuration:" -ForegroundColor Cyan
+          Write-Host "=============================" -ForegroundColor Cyan
+          Write-Host "Application Gateway: $(applicationGatewayName)" -ForegroundColor White
+          Write-Host "Virtual Network: $(virtualNetworkName)" -ForegroundColor White
+          Write-Host "Subnet: $(subnetName) ($(subnetAddressPrefix))" -ForegroundColor White
+          Write-Host "VNet Range: $(vnetAddressPrefix)" -ForegroundColor White
+          Write-Host "Backend IP: $(backendIPAddress)" -ForegroundColor White
+          Write-Host "Public IP: $(publicIPName)" -ForegroundColor White
+          Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White
+          Write-Host "Location: $(location)" -ForegroundColor White
 
 - stage: Deploy
-  displayName: 'Deploy to Azure'
+  displayName: '🚀 Deploy to Azure'
   dependsOn: Validate
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   jobs:
@@ -60,6 +100,17 @@ stages:
           - checkout: self
             displayName: 'Checkout Repository'
           
+          - task: AzureCLI@2
+            displayName: 'Create Resource Group (if needed)'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🏗️ Ensuring resource group exists..."
+                az group create --name $(resourceGroupName) --location "$(location)" --output table
+                echo "✅ Resource group ready!"
+          
           - task: AzureResourceManagerTemplateDeployment@3
             displayName: 'Deploy Application Gateway'
             inputs:
@@ -72,82 +123,218 @@ stages:
               templateLocation: 'Linked artifact'
               csmFile: '$(templateFile)'
               csmParametersFile: '$(parametersFile)'
+              overrideParameters: |
+                -applicationGatewayName $(applicationGatewayName)
+                -virtualNetworkName $(virtualNetworkName)
+                -subnetName $(subnetName)
+                -publicIPName $(publicIPName)
+                -backendIPAddress $(backendIPAddress)
+                -subnetAddressPrefix $(subnetAddressPrefix)
+                -vnetAddressPrefix $(vnetAddressPrefix)
+                -location "$(location)"
               deploymentMode: 'Incremental'
               deploymentName: '$(deploymentName)'
               deploymentOutputs: 'deploymentOutputs'
           
           - task: PowerShell@2
-            displayName: 'Display Deployment Outputs'
+            displayName: '📊 Display Deployment Results'
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "=== Deployment Outputs ==="
-                $outputs = '$(deploymentOutputs)' | ConvertFrom-Json
-                $outputs.PSObject.Properties | ForEach-Object {
-                    Write-Host "$($_.Name): $($_.Value.value)"
-                }
+                Write-Host "📊 Deployment Results:" -ForegroundColor Cyan
+                Write-Host "======================" -ForegroundColor Cyan
                 
-                # Set pipeline variables for use in subsequent stages
-                if ($outputs.publicIPAddress) {
-                    Write-Host "##vso[task.setvariable variable=publicIPAddress;isOutput=true]$($outputs.publicIPAddress.value)"
+                try {
+                    $outputs = '$(deploymentOutputs)' | ConvertFrom-Json
+                    $outputs.PSObject.Properties | ForEach-Object {
+                        Write-Host "  $($_.Name): $($_.Value.value)" -ForegroundColor White
+                    }
+                    
+                    # Set output variables for next stage
+                    if ($outputs.publicIPAddress) {
+                        Write-Host "##vso[task.setvariable variable=publicIPAddress;isOutput=true]$($outputs.publicIPAddress.value)"
+                    }
+                    if ($outputs.applicationGatewayName) {
+                        Write-Host "##vso[task.setvariable variable=deployedAppGatewayName;isOutput=true]$($outputs.applicationGatewayName.value)"
+                    }
+                    if ($outputs.virtualNetworkName) {
+                        Write-Host "##vso[task.setvariable variable=deployedVNetName;isOutput=true]$($outputs.virtualNetworkName.value)"
+                    }
+                    
+                    Write-Host ""
+                    Write-Host "✅ Deployment completed successfully!" -ForegroundColor Green
                 }
-                if ($outputs.applicationGatewayName) {
-                    Write-Host "##vso[task.setvariable variable=applicationGatewayName;isOutput=true]$($outputs.applicationGatewayName.value)"
+                catch {
+                    Write-Host "⚠️ Could not parse deployment outputs: $_" -ForegroundColor Yellow
                 }
 
-- stage: PostDeployment
-  displayName: 'Post-Deployment Validation'
+- stage: PostDeploy
+  displayName: '✅ Post-Deployment Validation'
   dependsOn: Deploy
   condition: succeeded()
   jobs:
   - job: ValidateDeployment
-    displayName: 'Validate Deployment'
+    displayName: 'Validate and Test Deployment'
     pool:
       vmImage: 'ubuntu-latest'
     variables:
       publicIPAddress: $[ stageDependencies.Deploy.DeployAppGateway.outputs['DeployAppGateway.publicIPAddress'] ]
-      applicationGatewayName: $[ stageDependencies.Deploy.DeployAppGateway.outputs['DeployAppGateway.applicationGatewayName'] ]
+      deployedAppGatewayName: $[ stageDependencies.Deploy.DeployAppGateway.outputs['DeployAppGateway.deployedAppGatewayName'] ]
+      deployedVNetName: $[ stageDependencies.Deploy.DeployAppGateway.outputs['DeployAppGateway.deployedVNetName'] ]
     
     steps:
     - task: AzureCLI@2
-      displayName: 'Check Application Gateway Status'
+      displayName: '🔍 Check Application Gateway Status'
       inputs:
         azureSubscription: '$(azureServiceConnection)'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          echo "=== Application Gateway Status ==="
+          echo "🔍 Application Gateway Status Check"
+          echo "==================================="
+          
+          # Get Application Gateway details
+          echo "📋 Application Gateway Details:"
           az network application-gateway show \
             --name $(applicationGatewayName) \
             --resource-group $(resourceGroupName) \
-            --query '{name:name,location:location,provisioningState:provisioningState,operationalState:operationalState}' \
+            --query '{
+              name: name,
+              location: location,
+              provisioningState: provisioningState,
+              operationalState: operationalState,
+              sku: sku.name,
+              tier: sku.tier,
+              capacity: sku.capacity,
+              autoscale: autoscaleConfiguration
+            }' \
             --output table
           
           echo ""
-          echo "=== Backend Health ==="
-          az network application-gateway show-backend-health \
+          echo "🌐 Public IP Details:"
+          az network public-ip show \
+            --name $(publicIPName) \
+            --resource-group $(resourceGroupName) \
+            --query '{
+              name: name,
+              ipAddress: ipAddress,
+              allocationMethod: publicIPAllocationMethod,
+              sku: sku.name
+            }' \
+            --output table
+          
+          echo ""
+          echo "🏗️ Virtual Network Details:"
+          az network vnet show \
+            --name $(virtualNetworkName) \
+            --resource-group $(resourceGroupName) \
+            --query '{
+              name: name,
+              addressSpace: addressSpace.addressPrefixes[0],
+              subnets: length(subnets)
+            }' \
+            --output table
+    
+    - task: AzureCLI@2
+      displayName: '🏥 Check Backend Health'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🏥 Backend Health Status"
+          echo "========================"
+          
+          # Check backend health
+          health_output=$(az network application-gateway show-backend-health \
             --name $(applicationGatewayName) \
             --resource-group $(resourceGroupName) \
-            --query 'backendAddressPools[0].backendHttpSettingsCollection[0].servers[0].health' \
-            --output table
+            --output json 2>/dev/null || echo "[]")
           
-          echo ""
-          echo "=== Public IP Address ==="
-          echo "Application Gateway is accessible at: http://$(publicIPAddress)"
+          if [ "$health_output" = "[]" ]; then
+            echo "⚠️ No backend health data available yet (this is normal for new deployments)"
+            echo "   Backend health will be available once the Application Gateway is fully operational"
+          else
+            echo "$health_output" | jq -r '.backendAddressPools[0].backendHttpSettingsCollection[0].servers[] | "Backend: \(.address) - Health: \(.health)"'
+          fi
     
     - task: PowerShell@2
-      displayName: 'Test HTTP Connectivity'
+      displayName: '🌐 Test Connectivity'
       inputs:
         targetType: 'inline'
         script: |
-          try {
-              $response = Invoke-WebRequest -Uri "http://$(publicIPAddress)" -Method GET -TimeoutSec 30 -ErrorAction Stop
-              Write-Host "✅ HTTP connectivity test successful"
-              Write-Host "Status Code: $($response.StatusCode)"
-              Write-Host "Status Description: $($response.StatusDescription)"
+          Write-Host "🌐 Testing Application Gateway Connectivity" -ForegroundColor Cyan
+          Write-Host "==========================================" -ForegroundColor Cyan
+          
+          $publicIP = "$(publicIPAddress)"
+          if ([string]::IsNullOrEmpty($publicIP)) {
+            $publicIP = "$(System.DefaultWorkingDirectory)/outputs not available"
           }
-          catch {
-              Write-Warning "⚠️ HTTP connectivity test failed (this is expected if backend is not configured)"
-              Write-Host "Error: $($_.Exception.Message)"
-              Write-Host "This is normal for a new Application Gateway without configured backends"
+          
+          Write-Host "Public IP Address: $publicIP" -ForegroundColor White
+          Write-Host "Test URL: http://$publicIP" -ForegroundColor White
+          Write-Host ""
+          
+          if ($publicIP -match '^\d+\.\d+\.\d+\.\d+$') {
+            try {
+              Write-Host "🔄 Testing HTTP connectivity..." -ForegroundColor Yellow
+              $response = Invoke-WebRequest -Uri "http://$publicIP" -Method GET -TimeoutSec 10 -ErrorAction Stop
+              Write-Host "✅ HTTP connectivity test successful!" -ForegroundColor Green
+              Write-Host "   Status Code: $($response.StatusCode)" -ForegroundColor White
+              Write-Host "   Status Description: $($response.StatusDescription)" -ForegroundColor White
+            }
+            catch {
+              Write-Host "⚠️ HTTP connectivity test failed (expected if backend not configured)" -ForegroundColor Yellow
+              Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor Yellow
+              Write-Host "   This is normal for a new Application Gateway without configured backends" -ForegroundColor Yellow
+            }
+          } else {
+            Write-Host "⚠️ Could not retrieve public IP address for testing" -ForegroundColor Yellow
           }
+          
+          Write-Host ""
+          Write-Host "🎯 Next Steps:" -ForegroundColor Cyan
+          Write-Host "=============" -ForegroundColor Cyan
+          Write-Host "1. Configure your backend servers to respond on port 80" -ForegroundColor White
+          Write-Host "2. Ensure backend servers are reachable from subnet $(subnetAddressPrefix)" -ForegroundColor White
+          Write-Host "3. Set up custom health probes if needed" -ForegroundColor White
+          Write-Host "4. Configure SSL certificates for HTTPS" -ForegroundColor White
+          Write-Host "5. Set up monitoring and alerts" -ForegroundColor White
+
+- stage: Cleanup
+  displayName: '🧹 Cleanup (Manual Trigger Only)'
+  dependsOn: []
+  condition: and(always(), eq(variables['Build.Reason'], 'Manual'))
+  jobs:
+  - job: ManualCleanup
+    displayName: 'Manual Resource Cleanup'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: PowerShell@2
+      displayName: '⚠️ Cleanup Warning'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "⚠️ CLEANUP STAGE" -ForegroundColor Red
+          Write-Host "================" -ForegroundColor Red
+          Write-Host "This stage is for manual cleanup only!" -ForegroundColor Yellow
+          Write-Host "To actually delete resources, enable the cleanup task below." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "Resources that would be deleted:" -ForegroundColor White
+          Write-Host "- Application Gateway: $(applicationGatewayName)" -ForegroundColor White
+          Write-Host "- Public IP: $(publicIPName)" -ForegroundColor White
+          Write-Host "- Virtual Network: $(virtualNetworkName)" -ForegroundColor White
+          Write-Host "- Resource Group: $(resourceGroupName)" -ForegroundColor White
+    
+    # Uncomment the task below to enable actual cleanup
+    # - task: AzureCLI@2
+    #   displayName: '🗑️ Delete Resources'
+    #   inputs:
+    #     azureSubscription: '$(azureServiceConnection)'
+    #     scriptType: 'bash'
+    #     scriptLocation: 'inlineScript'
+    #     inlineScript: |
+    #       echo "🗑️ Deleting Application Gateway resources..."
+    #       az group delete --name $(resourceGroupName) --yes --no-wait
+    #       echo "✅ Cleanup initiated!"

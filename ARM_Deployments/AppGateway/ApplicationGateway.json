@@ -29,14 +29,14 @@
         },
         "subnetAddressPrefix": {
             "type": "string",
-            "defaultValue": "10.0.1.0/24",
+            "defaultValue": "10.10.1.32/27",
             "metadata": {
                 "description": "Address prefix for the Application Gateway subnet"
             }
         },
         "vnetAddressPrefix": {
             "type": "string",
-            "defaultValue": "10.0.0.0/16",
+            "defaultValue": "10.10.0.0/22",
             "metadata": {
                 "description": "Address prefix for the virtual network"
             }
@@ -49,7 +49,7 @@
         },
         "backendIPAddress": {
             "type": "string",
-            "defaultValue": "10.0.2.10",
+            "defaultValue": "10.10.2.10",
             "metadata": {
                 "description": "Backend server IP address"
             }
@@ -109,7 +109,7 @@
                 },
                 "autoscaleConfiguration": {
                     "minCapacity": 1,
-                    "maxCapacity": 2
+                    "maxCapacity": 3
                 },
                 "gatewayIPConfigurations": [
                     {
