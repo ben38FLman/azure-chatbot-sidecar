@@ -105,7 +105,7 @@
             "properties": {
                 "sku": {
                     "name": "Standard_v2",
-                    "tier": "Standard"
+                    "tier": "Standard_v2"
                 },
                 "autoscaleConfiguration": {
                     "minCapacity": 1,

@@ -125,8 +125,42 @@ stages:
                 echo "🏷️  Deployment Name: $(deploymentName)"
                 echo "📍 Resource Group: $(resourceGroupName)"
                 echo "🌍 Location: $(location)"
+                echo ""
+                echo "📋 Parameters being passed:"
+                echo "  applicationGatewayName: $(applicationGatewayName)"
+                echo "  virtualNetworkName: $(virtualNetworkName)"
+                echo "  subnetName: $(subnetName)"
+                echo "  publicIPName: $(publicIPName)"
+                echo "  backendIPAddress: $(backendIPAddress)"
+                echo "  subnetAddressPrefix: $(subnetAddressPrefix)"
+                echo "  vnetAddressPrefix: $(vnetAddressPrefix)"
+                echo "  location: $(location)"
+                echo ""
                 
-                # Deploy the ARM template using Azure CLI
+                # First, let's validate again before deploying
+                echo "🔍 Final validation before deployment..."
+                az deployment group validate \
+                  --resource-group "$(resourceGroupName)" \
+                  --template-file "$(templateFile)" \
+                  --parameters applicationGatewayName="$(applicationGatewayName)" \
+                  --parameters virtualNetworkName="$(virtualNetworkName)" \
+                  --parameters subnetName="$(subnetName)" \
+                  --parameters publicIPName="$(publicIPName)" \
+                  --parameters backendIPAddress="$(backendIPAddress)" \
+                  --parameters subnetAddressPrefix="$(subnetAddressPrefix)" \
+                  --parameters vnetAddressPrefix="$(vnetAddressPrefix)" \
+                  --parameters location="$(location)" \
+                  --verbose
+                
+                if [ $? -ne 0 ]; then
+                  echo "❌ Validation failed! Stopping deployment."
+                  exit 1
+                fi
+                
+                echo "✅ Validation passed. Starting deployment..."
+                echo ""
+                
+                # Deploy the ARM template using Azure CLI with detailed error output
                 az deployment group create \
                   --resource-group "$(resourceGroupName)" \
                   --template-file "$(templateFile)" \
@@ -139,7 +173,45 @@ stages:
                   --parameters subnetAddressPrefix="$(subnetAddressPrefix)" \
                   --parameters vnetAddressPrefix="$(vnetAddressPrefix)" \
                   --parameters location="$(location)" \
-                  --verbose
+                  --verbose \
+                  --debug
+                
+                DEPLOYMENT_EXIT_CODE=$?
+                
+                if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
+                  echo ""
+                  echo "❌ Deployment failed with exit code: $DEPLOYMENT_EXIT_CODE"
+                  echo "🔍 Getting deployment error details..."
+                  
+                  # Get detailed error information
+                  az deployment group show \
+                    --resource-group "$(resourceGroupName)" \
+                    --name "$(deploymentName)" \
+                    --query '{
+                      provisioningState: properties.provisioningState,
+                      error: properties.error,
+                      timestamp: properties.timestamp
+                    }' \
+                    --output json
+                  
+                  # Get deployment operations to see which resource failed
+                  echo ""
+                  echo "🔍 Deployment operations:"
+                  az deployment operation group list \
+                    --resource-group "$(resourceGroupName)" \
+                    --name "$(deploymentName)" \
+                    --query '[].{
+                      operationId: operationId,
+                      provisioningState: properties.provisioningState,
+                      resourceType: properties.targetResource.resourceType,
+                      resourceName: properties.targetResource.resourceName,
+                      statusCode: properties.statusCode,
+                      statusMessage: properties.statusMessage.error.message
+                    }' \
+                    --output table
+                  
+                  exit $DEPLOYMENT_EXIT_CODE
+                fi
                 
                 echo "✅ Deployment completed successfully!"
                 
