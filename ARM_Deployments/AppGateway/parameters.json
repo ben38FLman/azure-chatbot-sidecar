@@ -36,10 +36,10 @@
             "value": 2
         },
         "autoScaleMinCapacity": {
-            "value": 1
+            "value": 2
         },
         "autoScaleMaxCapacity": {
-            "value": 10
+            "value": 5
         },
         "backendAddresses": {
             "value": [
