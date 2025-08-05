@@ -20,17 +20,17 @@ parameters:
 - name: templatePath
   displayName: 'ARM Template Path'
   type: string
-  default: 'ARM_Deployments/AppGateway/ApplicationGateway.json'
+  default: 'ARM_Deployments/Storage/StorageAccount.json'
 
 - name: parametersPath
   displayName: 'Parameters File Path'
   type: string
-  default: 'ARM_Deployments/AppGateway/parameters.json'
+  default: 'ARM_Deployments/Storage/parameters.json'
 
 - name: resourceGroupName
   displayName: 'Resource Group Name'
   type: string
-  default: 'rg-generic-nonprod'
+  default: 'rg-storage-nonprod'
 
 - name: location
   displayName: 'Azure Location'
@@ -62,8 +62,8 @@ parameters:
 
 variables:
   # Azure Connection Settings - UPDATE THESE VALUES
-  azureServiceConnection: 'Azure-ServiceConnection'
-  subscriptionId: 'your-subscription-id'
+  azureServiceConnection: 'MSFT-NonProd-DevOpsConnection'
+  subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'
   
   # Dynamic Variables
   deploymentName: '${{ parameters.resourceType }}-$(Build.BuildId)'
