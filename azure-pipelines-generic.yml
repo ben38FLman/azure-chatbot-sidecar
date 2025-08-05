@@ -133,29 +133,45 @@ stages:
               azureSubscription: $(azureServiceConnection)
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "🚀 Starting deployment of ${{ parameters.resourceType }}"
-                echo "📁 Template: ${{ parameters.templatePath }}"
-                echo "📋 Parameters: ${{ parameters.parametersPath }}"
-                echo "🏷️  Deployment Name: $(deploymentName)"
-                
-                # Deploy the ARM template
-                az deployment group create \
-                  --resource-group "${{ parameters.resourceGroupName }}" \
-                  --template-file "$(Pipeline.Workspace)/arm-templates/${{ parameters.templatePath }}" \
-                  --parameters @"$(Pipeline.Workspace)/arm-templates/${{ parameters.parametersPath }}" \
-                  --name "$(deploymentName)" \
-                  --verbose
-                
-                echo "✅ Deployment completed successfully!"
-                
-                # Get deployment outputs
-                echo "📤 Deployment outputs:"
-                az deployment group show \
-                  --resource-group "${{ parameters.resourceGroupName }}" \
-                  --name "$(deploymentName)" \
-                  --query properties.outputs \
-                  --output table
+        inlineScript: |
+          echo "🚀 Starting deployment of ${{ parameters.resourceType }}"
+          echo "📁 Template: ${{ parameters.templatePath }}"
+          echo "📋 Parameters: ${{ parameters.parametersPath }}"
+          echo "🏷️  Deployment Name: $(deploymentName)"
+          echo "📍 Resource Group: ${{ parameters.resourceGroupName }}"
+          
+          # Debug: Show what we're about to deploy
+          echo "🔍 Debug Information:"
+          echo "  - resourceType: ${{ parameters.resourceType }}"
+          echo "  - Build.BuildId: $(Build.BuildId)"
+          echo "  - Constructed deploymentName: $(deploymentName)"
+          echo ""
+          
+          # Deploy the ARM template
+          az deployment group create \
+            --resource-group "${{ parameters.resourceGroupName }}" \
+            --template-file "$(Pipeline.Workspace)/arm-templates/${{ parameters.templatePath }}" \
+            --parameters @"$(Pipeline.Workspace)/arm-templates/${{ parameters.parametersPath }}" \
+            --name "$(deploymentName)" \
+            --verbose
+          
+          echo "✅ Deployment completed successfully!"
+          
+          # Verify the deployment exists before trying to get outputs
+          echo "🔍 Verifying deployment exists..."
+          az deployment group show \
+            --resource-group "${{ parameters.resourceGroupName }}" \
+            --name "$(deploymentName)" \
+            --query '{name: name, provisioningState: properties.provisioningState}' \
+            --output table
+          
+          # Get deployment outputs
+          echo "📤 Deployment outputs:"
+          az deployment group show \
+            --resource-group "${{ parameters.resourceGroupName }}" \
+            --name "$(deploymentName)" \
+            --query properties.outputs \
+            --output table
 
 - stage: Test
   displayName: 'Test Deployment'
@@ -176,13 +192,27 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           echo "🧪 Testing deployment of ${{ parameters.resourceType }}"
+          echo "🔍 Debug Information:"
+          echo "  - resourceType: ${{ parameters.resourceType }}"
+          echo "  - Build.BuildId: $(Build.BuildId)"
+          echo "  - Looking for deploymentName: $(deploymentName)"
+          echo "  - Resource Group: ${{ parameters.resourceGroupName }}"
+          echo ""
+          
+          # First, list all deployments to see what's available
+          echo "📋 All deployments in resource group ${{ parameters.resourceGroupName }}:"
+          az deployment group list \
+            --resource-group "${{ parameters.resourceGroupName }}" \
+            --query '[].{name: name, provisioningState: properties.provisioningState, timestamp: properties.timestamp}' \
+            --output table
+          echo ""
           
           # Check deployment status
           DEPLOYMENT_STATUS=$(az deployment group show \
             --resource-group "${{ parameters.resourceGroupName }}" \
             --name "$(deploymentName)" \
             --query properties.provisioningState \
-            --output tsv)
+            --output tsv 2>/dev/null || echo "NotFound")
           
           echo "📊 Deployment Status: $DEPLOYMENT_STATUS"
           
@@ -194,8 +224,12 @@ stages:
             az resource list \
               --resource-group "${{ parameters.resourceGroupName }}" \
               --output table
+          elif [ "$DEPLOYMENT_STATUS" = "NotFound" ]; then
+            echo "❌ Deployment $(deploymentName) not found!"
+            echo "This might be due to a timing issue or incorrect deployment name."
+            exit 1
           else
-            echo "❌ Deployment test failed!"
+            echo "❌ Deployment test failed with status: $DEPLOYMENT_STATUS"
             exit 1
           fi
 
