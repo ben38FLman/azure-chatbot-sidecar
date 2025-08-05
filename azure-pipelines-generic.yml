@@ -133,45 +133,45 @@ stages:
               azureSubscription: $(azureServiceConnection)
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
-        inlineScript: |
-          echo "🚀 Starting deployment of ${{ parameters.resourceType }}"
-          echo "📁 Template: ${{ parameters.templatePath }}"
-          echo "📋 Parameters: ${{ parameters.parametersPath }}"
-          echo "🏷️  Deployment Name: $(deploymentName)"
-          echo "📍 Resource Group: ${{ parameters.resourceGroupName }}"
-          
-          # Debug: Show what we're about to deploy
-          echo "🔍 Debug Information:"
-          echo "  - resourceType: ${{ parameters.resourceType }}"
-          echo "  - Build.BuildId: $(Build.BuildId)"
-          echo "  - Constructed deploymentName: $(deploymentName)"
-          echo ""
-          
-          # Deploy the ARM template
-          az deployment group create \
-            --resource-group "${{ parameters.resourceGroupName }}" \
-            --template-file "$(Pipeline.Workspace)/arm-templates/${{ parameters.templatePath }}" \
-            --parameters @"$(Pipeline.Workspace)/arm-templates/${{ parameters.parametersPath }}" \
-            --name "$(deploymentName)" \
-            --verbose
-          
-          echo "✅ Deployment completed successfully!"
-          
-          # Verify the deployment exists before trying to get outputs
-          echo "🔍 Verifying deployment exists..."
-          az deployment group show \
-            --resource-group "${{ parameters.resourceGroupName }}" \
-            --name "$(deploymentName)" \
-            --query '{name: name, provisioningState: properties.provisioningState}' \
-            --output table
-          
-          # Get deployment outputs
-          echo "📤 Deployment outputs:"
-          az deployment group show \
-            --resource-group "${{ parameters.resourceGroupName }}" \
-            --name "$(deploymentName)" \
-            --query properties.outputs \
-            --output table
+              inlineScript: |
+                echo "🚀 Starting deployment of ${{ parameters.resourceType }}"
+                echo "📁 Template: ${{ parameters.templatePath }}"
+                echo "📋 Parameters: ${{ parameters.parametersPath }}"
+                echo "🏷️  Deployment Name: $(deploymentName)"
+                echo "📍 Resource Group: ${{ parameters.resourceGroupName }}"
+                
+                # Debug: Show what we're about to deploy
+                echo "🔍 Debug Information:"
+                echo "  - resourceType: ${{ parameters.resourceType }}"
+                echo "  - Build.BuildId: $(Build.BuildId)"
+                echo "  - Constructed deploymentName: $(deploymentName)"
+                echo ""
+                
+                # Deploy the ARM template
+                az deployment group create \
+                  --resource-group "${{ parameters.resourceGroupName }}" \
+                  --template-file "$(Pipeline.Workspace)/arm-templates/${{ parameters.templatePath }}" \
+                  --parameters @"$(Pipeline.Workspace)/arm-templates/${{ parameters.parametersPath }}" \
+                  --name "$(deploymentName)" \
+                  --verbose
+                
+                echo "✅ Deployment completed successfully!"
+                
+                # Verify the deployment exists before trying to get outputs
+                echo "🔍 Verifying deployment exists..."
+                az deployment group show \
+                  --resource-group "${{ parameters.resourceGroupName }}" \
+                  --name "$(deploymentName)" \
+                  --query '{name: name, provisioningState: properties.provisioningState}' \
+                  --output table
+                
+                # Get deployment outputs
+                echo "📤 Deployment outputs:"
+                az deployment group show \
+                  --resource-group "${{ parameters.resourceGroupName }}" \
+                  --name "$(deploymentName)" \
+                  --query properties.outputs \
+                  --output table
 
 - stage: Test
   displayName: 'Test Deployment'
