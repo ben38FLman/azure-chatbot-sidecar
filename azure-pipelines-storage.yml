@@ -1,0 +1,288 @@
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - ARM_Deployments/Storage/*
+
+variables:
+  # Azure Connection Settings
+  azureServiceConnection: 'MSFT-NonProd-DevOpsConnection'
+  subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'
+  
+  # Resource Settings
+  resourceGroupName: 'rg-storage-nonprod'
+  location: 'eastus'
+  
+  # Template Files
+  templateFile: 'ARM_Deployments/Storage/StorageAccount-Basic.json'
+  parametersFile: 'ARM_Deployments/Storage/parameters-basic.json'
+  
+  # Deployment Settings
+  deploymentName: 'StorageAccount-$(Build.BuildId)'
+  
+  # Storage Account Configuration
+  storageAccountName: 'stbenruggieronp001'
+  storageAccountType: 'Standard_LRS'
+
+stages:
+- stage: ValidateStorage
+  displayName: '🔍 Validate Storage Template'
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate Storage Account Template'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      displayName: 'Checkout Repository'
+    
+    - task: PowerShell@2
+      displayName: '📋 Display Storage Configuration'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "🗃️ Storage Account Deployment Configuration" -ForegroundColor Cyan
+          Write-Host "===========================================" -ForegroundColor Cyan
+          Write-Host "Storage Account: $(storageAccountName)" -ForegroundColor White
+          Write-Host "Storage Type: $(storageAccountType)" -ForegroundColor White
+          Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White
+          Write-Host "Location: $(location)" -ForegroundColor White
+          Write-Host "Template: $(templateFile)" -ForegroundColor White
+          Write-Host "Parameters: $(parametersFile)" -ForegroundColor White
+    
+    - task: AzureCLI@2
+      displayName: 'Validate Storage ARM Template'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Validating storage account ARM template..."
+          echo "🏗️ Creating resource group for validation..."
+          az group create --name $(resourceGroupName) --location "$(location)" --output table
+          
+          echo "🔍 Validating template syntax and parameters..."
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file $(templateFile) \
+            --parameters storageAccountName="$(storageAccountName)" \
+            --parameters location="$(location)" \
+            --parameters storageAccountType="$(storageAccountType)" \
+            --verbose
+          
+          echo "✅ Storage template validation completed successfully!"
+
+- stage: DeployStorage
+  displayName: '🚀 Deploy Storage Account'
+  dependsOn: ValidateStorage
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployStorageAccount
+    displayName: 'Deploy Storage Account'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'nonprod-azure'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            displayName: 'Checkout Repository'
+          
+          - task: AzureCLI@2
+            displayName: 'Create Resource Group'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🏗️ Ensuring resource group exists..."
+                az group create --name $(resourceGroupName) --location "$(location)" --output table
+                echo "✅ Resource group ready!"
+          
+          - task: AzureCLI@2
+            displayName: 'Deploy Storage Account'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Starting storage account deployment..."
+                echo "📁 Template: $(templateFile)"
+                echo "🏷️  Deployment Name: $(deploymentName)"
+                echo "📍 Resource Group: $(resourceGroupName)"
+                echo "🌍 Location: $(location)"
+                echo ""
+                echo "📋 Parameters:"
+                echo "  storageAccountName: $(storageAccountName)"
+                echo "  storageAccountType: $(storageAccountType)"
+                echo "  location: $(location)"
+                echo ""
+                
+                # Deploy the storage account ARM template
+                az deployment group create \
+                  --resource-group "$(resourceGroupName)" \
+                  --template-file "$(templateFile)" \
+                  --name "$(deploymentName)" \
+                  --parameters storageAccountName="$(storageAccountName)" \
+                  --parameters location="$(location)" \
+                  --parameters storageAccountType="$(storageAccountType)" \
+                  --verbose
+                
+                echo "✅ Storage account deployment completed!"
+                
+                # Get deployment outputs
+                echo "📤 Deployment outputs:"
+                az deployment group show \
+                  --resource-group "$(resourceGroupName)" \
+                  --name "$(deploymentName)" \
+                  --query properties.outputs \
+                  --output table
+
+- stage: TestStorage
+  displayName: '✅ Test Storage Account'
+  dependsOn: DeployStorage
+  condition: succeeded()
+  jobs:
+  - job: TestStorageAccount
+    displayName: 'Verify Storage Account Deployment'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: AzureCLI@2
+      displayName: '🔍 Check Storage Account Status'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🗃️ Storage Account Status Check"
+          echo "==============================="
+          
+          # Get storage account details
+          echo "📋 Storage Account Details:"
+          az storage account show \
+            --name $(storageAccountName) \
+            --resource-group $(resourceGroupName) \
+            --query '{
+              name: name,
+              location: location,
+              provisioningState: provisioningState,
+              statusOfPrimary: statusOfPrimary,
+              sku: sku.name,
+              kind: kind,
+              accessTier: accessTier,
+              httpsOnly: supportsHttpsTrafficOnly,
+              tlsVersion: minimumTlsVersion
+            }' \
+            --output table
+          
+          echo ""
+          echo "🌐 Storage Account Endpoints:"
+          az storage account show \
+            --name $(storageAccountName) \
+            --resource-group $(resourceGroupName) \
+            --query 'primaryEndpoints' \
+            --output table
+    
+    - task: AzureCLI@2
+      displayName: '🧪 Test Storage Account Connectivity'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🧪 Testing Storage Account Connectivity"
+          echo "======================================"
+          
+          # Get storage account key for testing
+          STORAGE_KEY=$(az storage account keys list \
+            --resource-group $(resourceGroupName) \
+            --account-name $(storageAccountName) \
+            --query '[0].value' \
+            --output tsv)
+          
+          echo "🔑 Retrieved storage account key"
+          
+          # Test creating a container (this validates connectivity and permissions)
+          echo "📦 Testing container creation..."
+          az storage container create \
+            --name "test-container-$(Build.BuildId)" \
+            --account-name $(storageAccountName) \
+            --account-key "$STORAGE_KEY" \
+            --output table
+          
+          # List containers to verify
+          echo "📋 Listing containers:"
+          az storage container list \
+            --account-name $(storageAccountName) \
+            --account-key "$STORAGE_KEY" \
+            --output table
+          
+          # Clean up test container
+          echo "🧹 Cleaning up test container..."
+          az storage container delete \
+            --name "test-container-$(Build.BuildId)" \
+            --account-name $(storageAccountName) \
+            --account-key "$STORAGE_KEY"
+          
+          echo "✅ Storage account connectivity test completed successfully!"
+    
+    - task: PowerShell@2
+      displayName: '📊 Display Storage Summary'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "📊 Storage Account Deployment Summary" -ForegroundColor Cyan
+          Write-Host "====================================" -ForegroundColor Cyan
+          Write-Host "✅ Storage Account: $(storageAccountName)" -ForegroundColor Green
+          Write-Host "✅ Resource Group: $(resourceGroupName)" -ForegroundColor Green
+          Write-Host "✅ Location: $(location)" -ForegroundColor Green
+          Write-Host "✅ Storage Type: $(storageAccountType)" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "🎯 Next Steps:" -ForegroundColor Cyan
+          Write-Host "=============" -ForegroundColor Cyan
+          Write-Host "1. Configure applications to use the storage account" -ForegroundColor White
+          Write-Host "2. Set up access policies and permissions as needed" -ForegroundColor White
+          Write-Host "3. Configure monitoring and alerts" -ForegroundColor White
+          Write-Host "4. Set up backup and lifecycle policies" -ForegroundColor White
+
+- stage: CleanupStorage
+  displayName: '🧹 Cleanup (Manual Only)'
+  dependsOn: []
+  condition: and(always(), eq(variables['Build.Reason'], 'Manual'))
+  jobs:
+  - job: ManualCleanup
+    displayName: 'Manual Storage Cleanup'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: PowerShell@2
+      displayName: '⚠️ Cleanup Warning'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "⚠️ STORAGE CLEANUP STAGE" -ForegroundColor Red
+          Write-Host "========================" -ForegroundColor Red
+          Write-Host "This stage is for manual cleanup only!" -ForegroundColor Yellow
+          Write-Host "To actually delete resources, enable the cleanup task below." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "Resources that would be deleted:" -ForegroundColor White
+          Write-Host "- Storage Account: $(storageAccountName)" -ForegroundColor White
+          Write-Host "- Resource Group: $(resourceGroupName)" -ForegroundColor White
+    
+    # Uncomment the task below to enable actual cleanup
+    # - task: AzureCLI@2
+    #   displayName: '🗑️ Delete Storage Resources'
+    #   inputs:
+    #     azureSubscription: '$(azureServiceConnection)'
+    #     scriptType: 'bash'
+    #     scriptLocation: 'inlineScript'
+    #     inlineScript: |
+    #       echo "🗑️ Deleting storage account resources..."
+    #       az group delete --name $(resourceGroupName) --yes --no-wait
+    #       echo "✅ Storage cleanup initiated!"
