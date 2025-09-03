@@ -62,8 +62,8 @@
           "tier": "Standard_v2"
         },
         "autoscaleConfiguration": {
-          "minCapacity": 1,
-          "maxCapacity": 3
+          "minCapacity": 3,
+          "maxCapacity": 5
         },
         "gatewayIPConfigurations": [
           {
