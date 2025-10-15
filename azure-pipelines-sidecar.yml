@@ -1,0 +1,274 @@
+trigger:
+  branches:
+    include:
+    - main
+    - feature/*
+  paths:
+    include:
+    - ARM_Deployments/ChatbotAppService/*
+
+variables:
+  azureServiceConnection: 'MSFT-NonProd-DevOpsConnection'
+  resourceGroupName: 'rg-chatbot-sidecar-nonprod'
+  location: 'eastus'
+  bicepFile: 'ARM_Deployments/ChatbotAppService/ChatbotAppService-Sidecar.bicep'
+  bicepParamsFile: 'ARM_Deployments/ChatbotAppService/ChatbotAppService-Sidecar.bicepparam'
+  deploymentName: 'ChatbotSidecar-$(Build.BuildId)'
+  appSourcePath: 'ARM_Deployments/ChatbotAppService/sidecar-app'
+
+stages:
+- stage: ValidateSidecar
+  displayName: '🔍 Validate Sidecar Template'
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate App Service with Sidecar Support'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      displayName: 'Checkout Repository'
+    
+    - task: PowerShell@2
+      displayName: '📋 Display Sidecar Configuration'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "🤖 AI Chatbot with Sidecar Extension" -ForegroundColor Cyan
+          Write-Host "===================================" -ForegroundColor Cyan
+          Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White
+          Write-Host "Bicep Template: $(bicepFile)" -ForegroundColor White
+          Write-Host "App Source: $(appSourcePath)" -ForegroundColor White
+          Write-Host "Note: Phi-4 sidecar will be added manually after deployment" -ForegroundColor Yellow
+    
+    - task: AzureCLI@2
+      displayName: 'Validate Bicep Template'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Validating Sidecar-ready template..."
+          
+          # Check if files exist
+          if [ ! -f "$(bicepFile)" ]; then
+            echo "❌ Bicep file not found: $(bicepFile)"
+            exit 1
+          fi
+          
+          if [ ! -f "$(bicepParamsFile)" ]; then
+            echo "❌ Parameters file not found: $(bicepParamsFile)"
+            exit 1
+          fi
+          
+          echo "🏗️ Creating resource group..."
+          az group create --name $(resourceGroupName) --location $(location) --output table
+          
+          echo "✅ Validating template..."
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file "$(bicepFile)" \
+            --parameters @"$(bicepParamsFile)" \
+            --verbose
+          
+          echo "✅ Template validation successful!"
+
+- stage: DeploySidecar
+  displayName: '🚀 Deploy App Service for Sidecar'
+  dependsOn: ValidateSidecar
+  condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')))
+  jobs:
+  - deployment: DeployAppService
+    displayName: 'Deploy App Service with Premium Plan'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'nonprod-azure'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            displayName: 'Checkout Repository'
+          
+          - task: AzureCLI@2
+            displayName: 'Deploy Infrastructure'
+            inputs:
+              azureServiceConnection: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Deploying App Service with sidecar support..."
+                
+                az deployment group create \
+                  --resource-group $(resourceGroupName) \
+                  --template-file "$(bicepFile)" \
+                  --parameters @"$(bicepParamsFile)" \
+                  --name "$(deploymentName)" \
+                  --verbose
+                
+                echo "✅ Infrastructure deployment completed!"
+                
+                # Get outputs
+                echo "📤 Deployment outputs:"
+                az deployment group show \
+                  --resource-group $(resourceGroupName) \
+                  --name "$(deploymentName)" \
+                  --query properties.outputs \
+                  --output table
+          
+          - task: AzureCLI@2
+            displayName: 'Deploy Node.js Application'
+            inputs:
+              azureServiceConnection: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "📦 Deploying Node.js chatbot application..."
+                
+                # Get app name from deployment outputs
+                APP_NAME=$(az deployment group show \
+                  --resource-group $(resourceGroupName) \
+                  --name "$(deploymentName)" \
+                  --query 'properties.outputs.appServiceName.value' \
+                  --output tsv)
+                
+                echo "🎯 Deploying to App Service: $APP_NAME"
+                
+                # Create deployment package
+                cd "$(appSourcePath)"
+                echo "📁 Current directory: $(pwd)"
+                echo "📋 Application files:"
+                ls -la
+                
+                # Deploy using zip deployment
+                echo "🚀 Deploying application code..."
+                az webapp deploy \
+                  --resource-group $(resourceGroupName) \
+                  --name "$APP_NAME" \
+                  --src-path . \
+                  --type zip \
+                  --timeout 300
+                
+                echo "✅ Application deployment completed!"
+                
+                # Get app URL
+                APP_URL=$(az deployment group show \
+                  --resource-group $(resourceGroupName) \
+                  --name "$(deploymentName)" \
+                  --query 'properties.outputs.appServiceUrl.value' \
+                  --output tsv)
+                
+                echo "🌐 Application URL: $APP_URL"
+
+- stage: PostDeployment
+  displayName: '📋 Post-Deployment Instructions'
+  dependsOn: DeploySidecar
+  condition: succeeded()
+  jobs:
+  - job: Instructions
+    displayName: 'Sidecar Setup Instructions'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: AzureCLI@2
+      displayName: '📋 Sidecar Setup Instructions'
+      inputs:
+        azureServiceConnection: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "✅ Deployment Complete! Next Steps:"
+          echo "=================================="
+          
+          # Get app details
+          APP_NAME=$(az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "$(deploymentName)" \
+            --query 'properties.outputs.appServiceName.value' \
+            --output tsv)
+          
+          APP_URL=$(az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "$(deploymentName)" \
+            --query 'properties.outputs.appServiceUrl.value' \
+            --output tsv)
+          
+          echo ""
+          echo "🎯 App Service Name: $APP_NAME"
+          echo "🌐 Application URL: $APP_URL"
+          echo ""
+          echo "📝 MANUAL STEPS REQUIRED:"
+          echo "========================"
+          echo "1. Go to Azure Portal"
+          echo "2. Navigate to App Service: $APP_NAME"
+          echo "3. Go to Deployment > Deployment Center"
+          echo "4. Click 'Containers' tab"
+          echo "5. Click 'Add' > 'Sidecar extension'"
+          echo "6. Select 'AI: phi-4-q4-gguf (Experimental)'"
+          echo "7. Provide a name (e.g., 'phi-4-sidecar')"
+          echo "8. Click 'Save'"
+          echo "9. Wait for deployment (status should show 'Running')"
+          echo ""
+          echo "🧪 TESTING:"
+          echo "==========="
+          echo "1. Open: $APP_URL"
+          echo "2. Check health: $APP_URL/health"
+          echo "3. Test chat functionality"
+          echo ""
+          echo "⚠️  NOTE: The AI features will only work after adding the sidecar extension!"
+
+- stage: TestBasicDeployment
+  displayName: '🧪 Test Basic Functionality'
+  dependsOn: DeploySidecar
+  condition: succeeded()
+  jobs:
+  - job: TestApp
+    displayName: 'Test Application Availability'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: AzureCLI@2
+      displayName: '🔍 Test Application'
+      inputs:
+        azureServiceConnection: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🧪 Testing application availability..."
+          
+          # Get app URL
+          APP_URL=$(az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "$(deploymentName)" \
+            --query 'properties.outputs.appServiceUrl.value' \
+            --output tsv)
+          
+          echo "🌐 Testing URL: $APP_URL"
+          
+          # Wait for app to be ready
+          echo "⏳ Waiting for application to start..."
+          sleep 60
+          
+          # Test health endpoint
+          echo "🏥 Testing health endpoint..."
+          for i in {1..5}; do
+            if curl -f -s "$APP_URL/health" > /dev/null; then
+              echo "✅ Health check passed on attempt $i"
+              echo "📋 Health response:"
+              curl -s "$APP_URL/health" | head -10
+              break
+            else
+              echo "⏳ Health check failed on attempt $i, retrying in 30s..."
+              sleep 30
+            fi
+            
+            if [ $i -eq 5 ]; then
+              echo "❌ Health check failed after 5 attempts"
+              echo "🔍 App may need more time to start or sidecar extension"
+            fi
+          done
+          
+          echo ""
+          echo "✅ Basic deployment test completed!"
