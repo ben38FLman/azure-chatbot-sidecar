@@ -1,0 +1,44 @@
+{
+  "name": "Azure App Service with AI Sidecar",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.azure-account",
+        "ms-azuretools.vscode-azureappservice",
+        "ms-azuretools.vscode-azureresourcegroups",
+        "ms-azuretools.vscode-bicep",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "forwardPorts": [3000, 8000, 11434],
+  "portsAttributes": {
+    "3000": {
+      "label": "Node.js App",
+      "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "Sidecar API",
+      "onAutoForward": "ignore"
+    },
+    "11434": {
+      "label": "Ollama Server",
+      "onAutoForward": "ignore"
+    }
+  },
+  "postCreateCommand": "npm install --prefix ARM_Deployments/ChatbotAppService/sidecar-app",
+  "remoteUser": "node"
+}
