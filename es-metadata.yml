@@ -1,0 +1,12 @@
+schemaVersion: 0.0.1
+isProduction: false
+accountableOwners:
+  service: c5b3c644-32db-45b7-be76-1edb1db3c757
+routing:
+  defaultAreaPath:
+    org: dtoproject
+    path: DTO\Enhancement Requests
+consumingServices:
+  - ae53b53f-9347-4198-b9b7-ff4b8228d6a7
+  - 702acafa-70dd-42f6-97b9-b0de84e036d3
+  - 2d719b74-9877-455e-9800-d96eb27be465
