@@ -92,12 +92,13 @@ param tags object = {
   CostCenter: 'Engineering'
 }
 
-// Variables for resource naming
+// Variables for resource naming with unique suffix to avoid conflicts
+var uniqueSuffix = substring(uniqueString(resourceGroup().id), 0, 6)
 var resourcePrefix = '${appConfig.name}-${appConfig.environment}'
-var appServicePlanName = '${resourcePrefix}-plan'
-var appServiceName = '${resourcePrefix}-app'
-var logAnalyticsName = '${resourcePrefix}-logs'
-var appInsightsName = '${resourcePrefix}-insights'
+var appServicePlanName = '${resourcePrefix}-plan-${uniqueSuffix}'
+var appServiceName = '${resourcePrefix}-app-${uniqueSuffix}'
+var logAnalyticsName = '${resourcePrefix}-logs-${uniqueSuffix}'
+var appInsightsName = '${resourcePrefix}-insights-${uniqueSuffix}'
 
 // Log Analytics Workspace for monitoring
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {

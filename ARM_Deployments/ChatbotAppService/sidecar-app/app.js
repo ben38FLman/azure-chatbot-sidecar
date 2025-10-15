@@ -9,7 +9,9 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SIDECAR_ENDPOINT = process.env.SIDECAR_ENDPOINT || 'http://localhost:11434';
+// Configuration - Use 127.0.0.1 instead of 'localhost' to avoid IPv6 resolution issues
+// Following Azure-Samples/ai-slm-in-app-service-sidecar pattern
+const SIDECAR_ENDPOINT = 'http://127.0.0.1:11434';
 
 // Middleware
 app.use(helmet({
@@ -142,25 +144,32 @@ app.post('/api/chat/sessions/:sessionId/messages', async (req, res) => {
   session.messages.push(userMessage);
   
   try {
-    // Prepare conversation context for the AI model
-    const conversationHistory = session.messages
-      .slice(-10) // Keep last 10 messages for context
-      .map(msg => `${msg.role}: ${msg.content}`)
-      .join('\n');
+    // Format conversation for OpenAI-compatible API (following Azure-Samples pattern)
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant.' }
+    ];
     
-    const prompt = `You are a helpful AI assistant. Please respond to the following conversation:\n\n${conversationHistory}\nassistant:`;
+    // Add conversation history to messages (keep last 10 for context)
+    session.messages.slice(-10).forEach(msg => {
+      messages.push({
+        role: msg.role,
+        content: msg.content
+      });
+    });
     
-    // Call the sidecar AI model
-    console.log(`Calling sidecar at ${SIDECAR_ENDPOINT}/api/generate`);
-    const aiResponse = await axios.post(`${SIDECAR_ENDPOINT}/api/generate`, {
-      model: model,
-      prompt: prompt,
+    // Add current user message
+    messages.push({
+      role: 'user',
+      content: message
+    });
+    
+    // Call the sidecar AI model using OpenAI-compatible endpoint
+    console.log(`Calling sidecar at ${SIDECAR_ENDPOINT}/v1/chat/completions`);
+    const aiResponse = await axios.post(`${SIDECAR_ENDPOINT}/v1/chat/completions`, {
+      messages: messages,
       stream: false,
-      options: {
-        temperature: 0.7,
-        max_tokens: 500,
-        top_p: 0.9
-      }
+      cache_prompt: false,
+      n_predict: 2048
     }, {
       timeout: 30000, // 30 second timeout
       headers: {
@@ -168,7 +177,8 @@ app.post('/api/chat/sessions/:sessionId/messages', async (req, res) => {
       }
     });
     
-    const aiContent = aiResponse.data.response || 'I apologize, but I was unable to generate a response.';
+    // Extract response content (OpenAI format)
+    const aiContent = aiResponse.data.choices?.[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
     
     // Add AI response to session
     const aiMessage = {
