@@ -34,12 +34,17 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "🤖 AI Chatbot with Sidecar Extension" -ForegroundColor Cyan
-          Write-Host "===================================" -ForegroundColor Cyan
+          Write-Host "🤖 AI Chatbot with Phi-4 Sidecar Extension" -ForegroundColor Cyan
+          Write-Host "====================================" -ForegroundColor Cyan
           Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White
           Write-Host "Bicep Template: $(bicepFile)" -ForegroundColor White
           Write-Host "App Source: $(appSourcePath)" -ForegroundColor White
-          Write-Host "Note: Phi-4 sidecar will be added manually after deployment" -ForegroundColor Yellow
+          Write-Host "Features:" -ForegroundColor Green
+          Write-Host "  ✅ Complete Node.js chatbot application" -ForegroundColor White
+          Write-Host "  ✅ Phi-4 sidecar container integration" -ForegroundColor White
+          Write-Host "  ✅ Application Insights monitoring" -ForegroundColor White
+          Write-Host "  ✅ Premium V3 App Service Plan" -ForegroundColor White
+          Write-Host "  ✅ Health checks and diagnostics" -ForegroundColor White
     
     - task: AzureCLI@2
       displayName: 'Validate Bicep Template'
@@ -87,6 +92,12 @@ stages:
     - checkout: self
       displayName: 'Checkout Repository'
     
+    - task: NodeTool@0
+      displayName: 'Setup Node.js'
+      inputs:
+        versionSpec: '18.x'
+        checkLatest: true
+    
     - task: AzureCLI@2
       displayName: 'Deploy Infrastructure'
       inputs:
@@ -131,11 +142,18 @@ stages:
           
           echo "🎯 Deploying to App Service: $APP_NAME"
           
-          # Create deployment package
+          # Navigate to application directory
           cd "$(appSourcePath)"
           echo "📁 Current directory: $(pwd)"
           echo "📋 Application files:"
           ls -la
+          
+          # Install dependencies if package.json exists
+          if [ -f "package.json" ]; then
+            echo "📦 Installing Node.js dependencies..."
+            npm install --production
+            echo "✅ Dependencies installed successfully"
+          fi
           
           # Deploy using zip deployment
           echo "🚀 Deploying application code..."

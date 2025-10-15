@@ -3,378 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chatbot - Azure App Service with Phi-4 Sidecar</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .chat-container {
-            width: 90%;
-            max-width: 800px;
-            height: 90%;
-            max-height: 600px;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .chat-header {
-            background: #4a90e2;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            position: relative;
-        }
-
-        .chat-header h1 {
-            font-size: 1.5rem;
-            margin-bottom: 5px;
-        }
-
-        .chat-header p {
-            opacity: 0.9;
-            font-size: 0.9rem;
-        }
-
-        .status-indicator {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 12px;
-            height: 12px;
-            background: #28a745;
-            border-radius: 50%;
-            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
-        }
-
-        .status-indicator.offline {
-            background: #dc3545;
-            box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
-        }
-
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #f8f9fa;
-        }
-
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: flex-start;
-        }
-
-        .message.user {
-            justify-content: flex-end;
-        }
-
-        .message.ai {
-            justify-content: flex-start;
-        }
-
-        .message-content {
-            max-width: 70%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            word-wrap: break-word;
-        }
-
-        .message.user .message-content {
-            background: #4a90e2;
-            color: white;
-            margin-left: 20px;
-        }
-
-        .message.ai .message-content {
-            background: white;
-            color: #333;
-            border: 1px solid #e9ecef;
-            margin-right: 20px;
-        }
-
-        .message-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 14px;
-        }
-
-        .message.user .message-avatar {
-            background: #6c757d;
-            color: white;
-            order: 2;
-        }
-
-        .message.ai .message-avatar {
-            background: #28a745;
-            color: white;
-        }
-
-        .chat-input {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #e9ecef;
-            display: flex;
-            gap: 10px;
-        }
-
-        .chat-input input {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #e9ecef;
-            border-radius: 25px;
-            outline: none;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        .chat-input input:focus {
-            border-color: #4a90e2;
-        }
-
-        .chat-input button {
-            padding: 12px 24px;
-            background: #4a90e2;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background-color 0.3s;
-        }
-
-        .chat-input button:hover:not(:disabled) {
-            background: #357abd;
-        }
-
-        .chat-input button:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-        }
-
-        .loading {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            color: #6c757d;
-            font-style: italic;
-        }
-
-        .loading-dots::after {
-            content: '...';
-            animation: loading 1.5s infinite;
-        }
-
-        @keyframes loading {
-            0%, 33% { content: '.'; }
-            34%, 66% { content: '..'; }
-            67%, 100% { content: '...'; }
-        }
-
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border: 1px solid #f5c6cb;
-        }
-
-        @media (max-width: 768px) {
-            .chat-container {
-                width: 95%;
-                height: 95%;
-            }
-            
-            .message-content {
-                max-width: 85%;
-            }
-        }
-    </style>
+    <title>AI Chatbot with Sidecar</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <div class="status-indicator" id="statusIndicator"></div>
-            <h1>🤖 AI Chatbot</h1>
-            <p>Powered by Azure App Service with Phi-4 Sidecar</p>
-        </div>
-        
-        <div class="chat-messages" id="chatMessages">
-            <div class="message ai">
-                <div class="message-avatar">AI</div>
-                <div class="message-content">
-                    Hello! I'm your AI assistant powered by Phi-4. How can I help you today?
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-robot"></i> AI Chatbot</h1>
+                <p>Powered by Phi-4 Sidecar Extension</p>
+                <div class="status-indicators">
+                    <div class="status-indicator" id="appStatus">
+                        <i class="fas fa-circle"></i>
+                        <span>App: <span id="appStatusText">Checking...</span></span>
+                    </div>
+                    <div class="status-indicator" id="sidecarStatus">
+                        <i class="fas fa-circle"></i>
+                        <span>AI: <span id="sidecarStatusText">Checking...</span></span>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="chat-input">
-            <input 
-                type="text" 
-                id="messageInput" 
-                placeholder="Type your message here..." 
-                maxlength="2000"
-            >
-            <button id="sendButton">Send</button>
+        </header>
+
+        <main class="main">
+            <div class="chat-container">
+                <div class="session-panel">
+                    <div class="session-header">
+                        <h3><i class="fas fa-comments"></i> Chat Sessions</h3>
+                        <button id="newSessionBtn" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> New Chat
+                        </button>
+                    </div>
+                    <div class="session-list" id="sessionList">
+                        <!-- Sessions will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="chat-panel">
+                    <div class="chat-header">
+                        <h3 id="currentSessionTitle">Select or create a chat session</h3>
+                        <div class="chat-controls">
+                            <button id="deleteSessionBtn" class="btn btn-danger" style="display: none;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="messages-container" id="messagesContainer">
+                        <div class="welcome-message">
+                            <div class="welcome-content">
+                                <i class="fas fa-robot fa-3x"></i>
+                                <h2>Welcome to AI Chatbot</h2>
+                                <p>Create a new chat session or select an existing one to start chatting with our AI assistant powered by Phi-4.</p>
+                                <div class="features">
+                                    <div class="feature">
+                                        <i class="fas fa-brain"></i>
+                                        <span>Advanced AI powered by Phi-4</span>
+                                    </div>
+                                    <div class="feature">
+                                        <i class="fas fa-shipping-fast"></i>
+                                        <span>Fast responses with sidecar architecture</span>
+                                    </div>
+                                    <div class="feature">
+                                        <i class="fas fa-lock"></i>
+                                        <span>Secure and private conversations</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-container" id="inputContainer" style="display: none;">
+                        <div class="input-group">
+                            <textarea id="messageInput" placeholder="Type your message here..." rows="3"></textarea>
+                            <div class="input-actions">
+                                <button id="sendBtn" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i>
+                                    Send
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-info">
+                            <small>Press Ctrl+Enter to send • AI responses may take a few seconds</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <p>&copy; 2024 Microsoft Azure Samples - AI Chatbot with Sidecar Extension</p>
+                <div class="footer-links">
+                    <a href="/api/info" target="_blank"><i class="fas fa-info-circle"></i> API Info</a>
+                    <a href="/health" target="_blank"><i class="fas fa-heartbeat"></i> Health Check</a>
+                    <a href="https://github.com/Azure-Samples/ai-slm-in-app-service-sidecar" target="_blank">
+                        <i class="fab fa-github"></i> Source Code
+                    </a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-content">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p>AI is thinking...</p>
         </div>
     </div>
 
-    <script>
-        class ChatApp {
-            constructor() {
-                this.messageInput = document.getElementById('messageInput');
-                this.sendButton = document.getElementById('sendButton');
-                this.chatMessages = document.getElementById('chatMessages');
-                this.statusIndicator = document.getElementById('statusIndicator');
-                this.conversationId = this.generateUUID();
-                
-                this.init();
-            }
+    <!-- Toast notifications -->
+    <div class="toast-container" id="toastContainer"></div>
 
-            init() {
-                this.sendButton.addEventListener('click', () => this.sendMessage());
-                this.messageInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this.sendMessage();
-                });
-
-                // Check health status
-                this.checkHealthStatus();
-                setInterval(() => this.checkHealthStatus(), 30000); // Check every 30 seconds
-            }
-
-            generateUUID() {
-                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                    const r = Math.random() * 16 | 0;
-                    const v = c == 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                });
-            }
-
-            async checkHealthStatus() {
-                try {
-                    const response = await fetch('/health');
-                    const health = await response.json();
-                    
-                    if (health.services && health.services.aiSidecar === 'healthy') {
-                        this.statusIndicator.classList.remove('offline');
-                    } else {
-                        this.statusIndicator.classList.add('offline');
-                    }
-                } catch (error) {
-                    this.statusIndicator.classList.add('offline');
-                }
-            }
-
-            addMessage(content, isUser = false, isLoading = false) {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
-                
-                const avatar = document.createElement('div');
-                avatar.className = 'message-avatar';
-                avatar.textContent = isUser ? 'U' : 'AI';
-                
-                const messageContent = document.createElement('div');
-                messageContent.className = 'message-content';
-                
-                if (isLoading) {
-                    messageContent.innerHTML = '<div class="loading">AI is thinking<span class="loading-dots"></span></div>';
-                } else {
-                    messageContent.textContent = content;
-                }
-                
-                messageDiv.appendChild(avatar);
-                messageDiv.appendChild(messageContent);
-                
-                this.chatMessages.appendChild(messageDiv);
-                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-                
-                return messageDiv;
-            }
-
-            showError(message) {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'error-message';
-                errorDiv.textContent = message;
-                this.chatMessages.appendChild(errorDiv);
-                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-            }
-
-            async sendMessage() {
-                const message = this.messageInput.value.trim();
-                if (!message) return;
-
-                // Add user message
-                this.addMessage(message, true);
-                
-                // Clear input and disable button
-                this.messageInput.value = '';
-                this.sendButton.disabled = true;
-                this.sendButton.textContent = 'Sending...';
-
-                // Add loading message
-                const loadingMessage = this.addMessage('', false, true);
-
-                try {
-                    const response = await fetch('/api/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            message: message,
-                            conversationId: this.conversationId
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    // Remove loading message
-                    loadingMessage.remove();
-
-                    if (data.success) {
-                        this.addMessage(data.response);
-                    } else {
-                        this.showError(`Error: ${data.error || 'Unknown error occurred'}`);
-                    }
-
-                } catch (error) {
-                    // Remove loading message
-                    loadingMessage.remove();
-                    this.showError(`Network error: ${error.message}`);
-                } finally {
-                    // Re-enable button
-                    this.sendButton.disabled = false;
-                    this.sendButton.textContent = 'Send';
-                    this.messageInput.focus();
-                }
-            }
-        }
-
-        // Initialize chat app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            new ChatApp();
-        });
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>

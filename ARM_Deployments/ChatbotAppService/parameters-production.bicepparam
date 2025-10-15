@@ -1,15 +1,15 @@
 using './ChatbotAppService-Sidecar.bicep'
 
-// Basic configuration for non-production environment
+// Production-ready configuration
 param appConfig = {
   name: 'chatbot-sidecar'
-  environment: 'nonprod'
+  environment: 'prod'
   location: 'eastus'
-  sku: 'P1V3'
+  sku: 'P3V3'
   reserved: true
 }
 
-// Enable sidecar with Phi-4 model
+// Production sidecar configuration with optimized settings
 param sidecarConfig = {
   enabled: true
   image: 'mcr.microsoft.com/azure-ai/phi-4-q4-gguf:latest'
@@ -25,13 +25,17 @@ param sidecarConfig = {
       value: '/app/models'
     }
     {
-      name: 'OLLAMA_DEBUG'
-      value: 'true'
+      name: 'OLLAMA_NUM_PARALLEL'
+      value: '4'
+    }
+    {
+      name: 'OLLAMA_MAX_LOADED_MODELS'
+      value: '2'
     }
   ]
 }
 
-// Application settings for the main Node.js app
+// Production application settings
 param appSettings = [
   {
     name: 'SIDECAR_ENDPOINT'
@@ -47,19 +51,29 @@ param appSettings = [
   }
   {
     name: 'NODE_ENV'
-    value: 'development'
+    value: 'production'
   }
   {
     name: 'PORT'
     value: '3000'
   }
+  {
+    name: 'WEBSITE_TIME_ZONE'
+    value: 'UTC'
+  }
+  {
+    name: 'WEBSITE_RUN_FROM_PACKAGE'
+    value: '1'
+  }
 ]
 
-// Tags for basic deployment
+// Production tags
 param tags = {
-  Environment: 'nonprod'
+  Environment: 'production'
   Project: 'ChatbotSidecar'
-  DeployedBy: 'Manual'
+  DeployedBy: 'AzureDevOps'
   CostCenter: 'Engineering'
-  Purpose: 'AI-Chatbot-Development'
+  Purpose: 'AI-Chatbot-Production'
+  BusinessUnit: 'Technology'
+  Compliance: 'Required'
 }
