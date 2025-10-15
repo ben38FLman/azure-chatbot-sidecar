@@ -1,0 +1,413 @@
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - ARM_Deployments/ChatbotAppService/*
+
+variables:
+  # Azure Connection Settings
+  azureServiceConnection: 'MSFT-NonProd-DevOpsConnection'
+  subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'
+  
+  # Resource Settings
+  resourceGroupName: 'rg-chatbot-nonprod'
+  location: 'eastus'
+  
+  # Bicep Template Files
+  bicepFile: 'ARM_Deployments/ChatbotAppService/ChatbotAppService.bicep'
+  bicepParamsFile: 'ARM_Deployments/ChatbotAppService/ChatbotAppService.bicepparam'
+  
+  # Container Registry Settings
+  containerRegistry: 'crchatbotnonprod'
+  
+  # Deployment Settings
+  deploymentName: 'ChatbotAppService-$(Build.BuildId)'
+  
+  # Application Settings
+  appSourcePath: 'ARM_Deployments/ChatbotAppService/src'
+
+stages:
+- stage: ValidateChatbot
+  displayName: '🔍 Validate Bicep Template'
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate Chatbot App Service Bicep Template'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      displayName: 'Checkout Repository'
+    
+    - task: PowerShell@2
+      displayName: '📋 Display Chatbot Configuration'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "🤖 Chatbot App Service Deployment Configuration" -ForegroundColor Cyan
+          Write-Host "==============================================" -ForegroundColor Cyan
+          Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White
+          Write-Host "Location: $(location)" -ForegroundColor White
+          Write-Host "Bicep Template: $(bicepFile)" -ForegroundColor White
+          Write-Host "Parameters File: $(bicepParamsFile)" -ForegroundColor White
+          Write-Host "Container Registry: $(containerRegistry)" -ForegroundColor White
+    
+    - task: AzureCLI@2
+      displayName: 'Install Latest Bicep'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔧 Installing latest Bicep CLI..."
+          az bicep install
+          az bicep version
+          echo "✅ Bicep CLI ready!"
+    
+    - task: AzureCLI@2
+      displayName: 'Validate Bicep Template'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Validating Chatbot Bicep template..."
+          echo "📁 Bicep File: $(bicepFile)"
+          echo "📋 Parameters File: $(bicepParamsFile)"
+          
+          # Compile Bicep to ARM for validation
+          echo "🔨 Compiling Bicep to ARM..."
+          az bicep build --file "$(bicepFile)" --outfile "temp-compiled.json"
+          
+          echo "🏗️ Creating resource group for validation..."
+          az group create --name $(resourceGroupName) --location "$(location)" --output table
+          
+          # Validate the compiled template with parameters
+          echo "✅ Validating deployment..."
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file "temp-compiled.json" \
+            --parameters @"$(bicepParamsFile)" \
+            --verbose
+          
+          echo "✅ Chatbot Bicep template validation completed successfully!"
+
+- stage: BuildContainer
+  displayName: '🏗️ Build Container Images'
+  dependsOn: ValidateChatbot
+  condition: succeeded()
+  jobs:
+  - job: BuildAndPushImages
+    displayName: 'Build and Push Container Images'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      displayName: 'Checkout Repository'
+    
+    - task: AzureCLI@2
+      displayName: 'Create Container Registry'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🏗️ Creating Container Registry..."
+          
+          # Check if registry exists
+          if az acr show --name $(containerRegistry) --resource-group $(resourceGroupName) 2>/dev/null; then
+            echo "✅ Container Registry $(containerRegistry) already exists"
+          else
+            echo "🔨 Creating new Container Registry..."
+            az acr create \
+              --resource-group $(resourceGroupName) \
+              --name $(containerRegistry) \
+              --sku Basic \
+              --admin-enabled true \
+              --location $(location)
+            echo "✅ Container Registry created successfully!"
+          fi
+    
+    - task: AzureCLI@2
+      displayName: 'Build and Push Chatbot Image'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🐳 Building and pushing chatbot container image..."
+          
+          # Get registry login server
+          REGISTRY_LOGIN_SERVER=$(az acr show --name $(containerRegistry) --resource-group $(resourceGroupName) --query loginServer --output tsv)
+          echo "📍 Registry: $REGISTRY_LOGIN_SERVER"
+          
+          # Build and push the image
+          echo "🔨 Building chatbot image..."
+          az acr build \
+            --registry $(containerRegistry) \
+            --image chatbot-app:$(Build.BuildId) \
+            --image chatbot-app:latest \
+            --file $(appSourcePath)/Dockerfile \
+            $(appSourcePath)
+          
+          echo "✅ Chatbot image built and pushed successfully!"
+          echo "🏷️ Image tags: chatbot-app:$(Build.BuildId), chatbot-app:latest"
+
+- stage: DeployChatbot
+  displayName: '🚀 Deploy Chatbot App Service'
+  dependsOn: 
+  - ValidateChatbot
+  - BuildContainer
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployChatbotAppService
+    displayName: 'Deploy Chatbot App Service from Bicep'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'nonprod-azure'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            displayName: 'Checkout Repository'
+          
+          - task: AzureCLI@2
+            displayName: 'Install Latest Bicep'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🔧 Installing latest Bicep CLI..."
+                az bicep install
+                az bicep version
+          
+          - task: AzureCLI@2
+            displayName: 'Create Resource Group'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🏗️ Ensuring resource group exists..."
+                az group create --name $(resourceGroupName) --location "$(location)" --output table
+                echo "✅ Resource group ready!"
+          
+          - task: AzureCLI@2
+            displayName: 'Deploy Chatbot Bicep Template'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Starting Chatbot Bicep template deployment..."
+                echo "📁 Bicep File: $(bicepFile)"
+                echo "📋 Parameters File: $(bicepParamsFile)"
+                echo "🏷️ Deployment Name: $(deploymentName)"
+                echo "📍 Resource Group: $(resourceGroupName)"
+                echo ""
+                
+                # Get container registry details
+                REGISTRY_LOGIN_SERVER=$(az acr show --name $(containerRegistry) --resource-group $(resourceGroupName) --query loginServer --output tsv)
+                REGISTRY_USERNAME=$(az acr credential show --name $(containerRegistry) --query username --output tsv)
+                REGISTRY_PASSWORD=$(az acr credential show --name $(containerRegistry) --query passwords[0].value --output tsv)
+                
+                echo "🏷️ Using container image: $REGISTRY_LOGIN_SERVER/chatbot-app:$(Build.BuildId)"
+                
+                # Deploy with container registry credentials
+                echo "🔄 Deploying Bicep template..."
+                az deployment group create \
+                  --resource-group "$(resourceGroupName)" \
+                  --template-file "$(bicepFile)" \
+                  --parameters @"$(bicepParamsFile)" \
+                  --parameters mainAppImage="$REGISTRY_LOGIN_SERVER/chatbot-app:$(Build.BuildId)" \
+                  --parameters dockerRegistryServerUrl="https://$REGISTRY_LOGIN_SERVER" \
+                  --parameters dockerRegistryServerUsername="$REGISTRY_USERNAME" \
+                  --parameters dockerRegistryServerPassword="$REGISTRY_PASSWORD" \
+                  --name "$(deploymentName)" \
+                  --verbose
+                
+                DEPLOYMENT_EXIT_CODE=$?
+                
+                if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
+                  echo ""
+                  echo "❌ Deployment failed with exit code: $DEPLOYMENT_EXIT_CODE"
+                  echo "🔍 Getting deployment error details..."
+                  
+                  # Get detailed error information
+                  az deployment group show \
+                    --resource-group "$(resourceGroupName)" \
+                    --name "$(deploymentName)" \
+                    --query '{
+                      provisioningState: properties.provisioningState,
+                      error: properties.error,
+                      timestamp: properties.timestamp
+                    }' \
+                    --output json
+                  
+                  exit $DEPLOYMENT_EXIT_CODE
+                fi
+                
+                echo "✅ Chatbot Bicep deployment completed successfully!"
+                
+                # Get deployment outputs
+                echo "📤 Deployment outputs:"
+                az deployment group show \
+                  --resource-group "$(resourceGroupName)" \
+                  --name "$(deploymentName)" \
+                  --query properties.outputs \
+                  --output table
+
+- stage: TestChatbot
+  displayName: '✅ Test Chatbot Deployment'
+  dependsOn: DeployChatbot
+  condition: succeeded()
+  jobs:
+  - job: TestChatbotAPI
+    displayName: 'Test Chatbot API Functionality'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: AzureCLI@2
+      displayName: '🔍 Verify Chatbot Deployment'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Chatbot Deployment Verification"
+          echo "================================="
+          
+          # Get App Service URL from deployment outputs
+          APP_URL=$(az deployment group show \
+            --resource-group "$(resourceGroupName)" \
+            --name "$(deploymentName)" \
+            --query 'properties.outputs.appServiceUrl.value' \
+            --output tsv)
+          
+          echo "🌐 App Service URL: $APP_URL"
+          
+          # Get App Service details
+          APP_NAME=$(az deployment group show \
+            --resource-group "$(resourceGroupName)" \
+            --name "$(deploymentName)" \
+            --query 'properties.outputs.appServiceName.value' \
+            --output tsv)
+          
+          echo ""
+          echo "📋 App Service Details:"
+          az webapp show \
+            --name "$APP_NAME" \
+            --resource-group $(resourceGroupName) \
+            --query '{
+              name: name,
+              state: state,
+              defaultHostName: defaultHostName,
+              kind: kind,
+              httpsOnly: httpsOnly,
+              outboundIpAddresses: outboundIpAddresses
+            }' \
+            --output table
+    
+    - task: AzureCLI@2
+      displayName: '🧪 Test Chatbot API Endpoints'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🧪 Testing Chatbot API Endpoints"
+          echo "==============================="
+          
+          # Get App Service URL
+          APP_URL=$(az deployment group show \
+            --resource-group "$(resourceGroupName)" \
+            --name "$(deploymentName)" \
+            --query 'properties.outputs.appServiceUrl.value' \
+            --output tsv)
+          
+          echo "🌐 Testing URL: $APP_URL"
+          
+          # Wait for deployment to be ready
+          echo "⏳ Waiting for application to be ready..."
+          sleep 60
+          
+          # Test health endpoint
+          echo ""
+          echo "🏥 Testing health endpoint..."
+          for i in {1..5}; do
+            if curl -f -s "$APP_URL/health" > /dev/null; then
+              echo "✅ Health check passed on attempt $i"
+              curl -s "$APP_URL/health" | head -10
+              break
+            else
+              echo "⏳ Health check failed on attempt $i, retrying in 30s..."
+              sleep 30
+            fi
+            
+            if [ $i -eq 5 ]; then
+              echo "❌ Health check failed after 5 attempts"
+              echo "🔍 Checking app logs..."
+              APP_NAME=$(az deployment group show \
+                --resource-group "$(resourceGroupName)" \
+                --name "$(deploymentName)" \
+                --query 'properties.outputs.appServiceName.value' \
+                --output tsv)
+              
+              az webapp log tail --name "$APP_NAME" --resource-group $(resourceGroupName) --provider application &
+              sleep 10
+              kill %1
+              exit 1
+            fi
+          done
+          
+          echo ""
+          echo "💬 Testing chat endpoint..."
+          CHAT_RESPONSE=$(curl -s -X POST "$APP_URL/api/chat" \
+            -H "Content-Type: application/json" \
+            -d '{"message": "Hello, this is a test message"}')
+          
+          if echo "$CHAT_RESPONSE" | grep -q "success"; then
+            echo "✅ Chat endpoint test passed"
+            echo "📝 Response preview:"
+            echo "$CHAT_RESPONSE" | head -5
+          else
+            echo "❌ Chat endpoint test failed"
+            echo "📝 Response:"
+            echo "$CHAT_RESPONSE"
+          fi
+          
+          echo ""
+          echo "📊 Testing models endpoint..."
+          curl -s "$APP_URL/api/models" | head -10
+          
+          echo ""
+          echo "✅ API testing completed!"
+
+- stage: CleanupChatbot
+  displayName: '🧹 Cleanup Chatbot (Manual Only)'
+  dependsOn: []
+  condition: and(always(), eq(variables['Build.Reason'], 'Manual'))
+  jobs:
+  - job: ManualCleanupChatbot
+    displayName: 'Manual Chatbot Cleanup'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: PowerShell@2
+      displayName: '⚠️ Chatbot Cleanup Warning'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "⚠️ CHATBOT CLEANUP STAGE" -ForegroundColor Red
+          Write-Host "========================" -ForegroundColor Red
+          Write-Host "This stage is for manual cleanup only!" -ForegroundColor Yellow
+          Write-Host "Uncomment the cleanup task to enable actual resource deletion." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White
+          Write-Host "Container Registry: $(containerRegistry)" -ForegroundColor White

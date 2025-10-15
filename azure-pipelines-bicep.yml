@@ -1,0 +1,243 @@
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - ARM_Deployments/AppGateway/*
+
+variables:
+  # Azure Connection Settings
+  azureServiceConnection: 'MSFT-NonProd-DevOpsConnection'
+  subscriptionId: 'f16506c7-8141-4ef7-8a2e-67f11b6f8acd'
+  
+  # Resource Settings
+  resourceGroupName: 'rg-appgateway-nonprod'
+  location: 'eastus'
+  
+  # Bicep Template Files
+  bicepFile: 'ARM_Deployments/AppGateway/ApplicationGateway.bicep'
+  bicepParamsFile: 'ARM_Deployments/AppGateway/ApplicationGateway.bicepparam'
+  
+  # Deployment Settings
+  deploymentName: 'AppGateway-Bicep-$(Build.BuildId)'
+
+stages:
+- stage: Validate
+  displayName: '🔍 Validate Bicep Template'
+  jobs:
+  - job: ValidateTemplate
+    displayName: 'Validate Application Gateway Bicep Template'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      displayName: 'Checkout Repository'
+    
+    - task: AzureCLI@2
+      displayName: 'Install Latest Bicep'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔧 Installing latest Bicep CLI..."
+          az bicep install
+          az bicep version
+          echo "✅ Bicep CLI ready!"
+    
+    - task: AzureCLI@2
+      displayName: 'Validate Bicep Template'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Validating Bicep template..."
+          echo "📁 Bicep File: $(bicepFile)"
+          echo "📋 Parameters File: $(bicepParamsFile)"
+          
+          # Compile Bicep to ARM for validation
+          echo "🔨 Compiling Bicep to ARM..."
+          az bicep build --file "$(bicepFile)" --outfile "temp-compiled.json"
+          
+          echo "🏗️ Creating resource group for validation..."
+          az group create --name $(resourceGroupName) --location "$(location)" --output table
+          
+          # Validate the compiled template with parameters
+          echo "✅ Validating deployment..."
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file "temp-compiled.json" \
+            --parameters @"$(bicepParamsFile)" \
+            --verbose
+          
+          echo "✅ Bicep template validation completed successfully!"
+
+- stage: Deploy
+  displayName: '🚀 Deploy Bicep Template'
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployAppGateway
+    displayName: 'Deploy Application Gateway from Bicep'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'nonprod-azure'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            displayName: 'Checkout Repository'
+          
+          - task: AzureCLI@2
+            displayName: 'Install Latest Bicep'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🔧 Installing latest Bicep CLI..."
+                az bicep install
+                az bicep version
+          
+          - task: AzureCLI@2
+            displayName: 'Create Resource Group'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🏗️ Ensuring resource group exists..."
+                az group create --name $(resourceGroupName) --location "$(location)" --output table
+                echo "✅ Resource group ready!"
+          
+          - task: AzureCLI@2
+            displayName: 'Deploy Bicep Template'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Starting Bicep template deployment..."
+                echo "📁 Bicep File: $(bicepFile)"
+                echo "📋 Parameters File: $(bicepParamsFile)"
+                echo "🏷️ Deployment Name: $(deploymentName)"
+                echo "📍 Resource Group: $(resourceGroupName)"
+                echo ""
+                
+                # Deploy directly from Bicep (Azure CLI will compile automatically)
+                echo "🔄 Deploying Bicep template..."
+                az deployment group create \
+                  --resource-group "$(resourceGroupName)" \
+                  --template-file "$(bicepFile)" \
+                  --parameters @"$(bicepParamsFile)" \
+                  --name "$(deploymentName)" \
+                  --verbose
+                
+                DEPLOYMENT_EXIT_CODE=$?
+                
+                if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
+                  echo ""
+                  echo "❌ Deployment failed with exit code: $DEPLOYMENT_EXIT_CODE"
+                  echo "🔍 Getting deployment error details..."
+                  
+                  # Get detailed error information
+                  az deployment group show \
+                    --resource-group "$(resourceGroupName)" \
+                    --name "$(deploymentName)" \
+                    --query '{
+                      provisioningState: properties.provisioningState,
+                      error: properties.error,
+                      timestamp: properties.timestamp
+                    }' \
+                    --output json
+                  
+                  exit $DEPLOYMENT_EXIT_CODE
+                fi
+                
+                echo "✅ Bicep deployment completed successfully!"
+                
+                # Get deployment outputs
+                echo "📤 Deployment outputs:"
+                az deployment group show \
+                  --resource-group "$(resourceGroupName)" \
+                  --name "$(deploymentName)" \
+                  --query properties.outputs \
+                  --output table
+
+- stage: PostDeploy
+  displayName: '✅ Post-Deployment Validation'
+  dependsOn: Deploy
+  condition: succeeded()
+  jobs:
+  - job: ValidateDeployment
+    displayName: 'Validate Bicep Deployment'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: AzureCLI@2
+      displayName: '🔍 Verify Bicep Deployment'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Bicep Deployment Verification"
+          echo "================================"
+          
+          # Get deployment status
+          echo "📋 Deployment Status:"
+          az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "$(deploymentName)" \
+            --query '{
+              deploymentName: name,
+              provisioningState: properties.provisioningState,
+              timestamp: properties.timestamp,
+              mode: properties.mode
+            }' \
+            --output table
+          
+          echo ""
+          echo "📤 Deployment Outputs:"
+          az deployment group show \
+            --resource-group "$(resourceGroupName)" \
+            --name "$(deploymentName)" \
+            --query properties.outputs \
+            --output json
+          
+          echo ""
+          echo "🏗️ Deployed Resources:"
+          az resource list \
+            --resource-group $(resourceGroupName) \
+            --query '[].{Name:name, Type:type, Location:location, State:properties.provisioningState}' \
+            --output table
+          
+          echo ""
+          echo "✅ Bicep deployment verification completed!"
+
+- stage: Cleanup
+  displayName: '🧹 Cleanup (Manual Trigger Only)'
+  dependsOn: []
+  condition: and(always(), eq(variables['Build.Reason'], 'Manual'))
+  jobs:
+  - job: ManualCleanup
+    displayName: 'Manual Resource Cleanup'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: PowerShell@2
+      displayName: '⚠️ Cleanup Warning'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "⚠️ CLEANUP STAGE" -ForegroundColor Red
+          Write-Host "================" -ForegroundColor Red
+          Write-Host "This stage is for manual cleanup only!" -ForegroundColor Yellow
+          Write-Host "Uncomment the cleanup task to enable actual resource deletion." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "Resource Group: $(resourceGroupName)" -ForegroundColor White

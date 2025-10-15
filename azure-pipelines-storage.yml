@@ -15,8 +15,9 @@ variables:
   resourceGroupName: 'rg-storage-nonprod'
   location: 'eastus'
   
-  # Template Files
-  templateFile: 'ARM_Deployments/Storage/StorageAccount-Basic.json'
+  # Bicep Template Files
+  bicepFile: 'ARM_Deployments/Storage/StorageAccount.bicep'
+  bicepParamsFile: 'ARM_Deployments/Storage/StorageAccount.bicepparam'
   parametersFile: 'ARM_Deployments/Storage/parameters-basic.json'
   
   # Deployment Settings
