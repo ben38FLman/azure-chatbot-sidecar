@@ -1,22 +1,8 @@
 {
   "name": "Azure Development Environment",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
   "features": {
-    "ghcr.io/devcontainers/features/azure-cli:1": {
-      "version": "latest"
-    },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "20"
-    },
-    "ghcr.io/devcontainers/features/git:1": {}
+    "ghcr.io/devcontainers/features/azure-cli:1": {}
   },
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "ms-vscode.azure-account",
-        "ms-azuretools.vscode-azureappservice"
-      ]
-    }
-  },
-  "postCreateCommand": "az --version && node --version && npm --version"
+  "postCreateCommand": "bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash && az --version'"
 }
